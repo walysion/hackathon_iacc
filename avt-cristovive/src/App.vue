@@ -1,25 +1,41 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import LoginView from './components/LoginView.vue'
 import DashboardView from './components/DashboardView.vue'
+import AdminDashboard from './components/AdminDashboard.vue'
 import AudioCapture from './components/AudioCapture.vue'
 import InterventionReview from './components/InterventionReview.vue'
 
-// Control de navegación de la aplicación
-const currentStep = ref('login') // 'login' | 'dashboard' | 'capture' | 'review' | 'success'
+// Control de navegación ampliado: agregamos 'role-select' y 'admin-dashboard'
+const currentStep = ref('login') // 'login' | 'role-select' | 'admin-dashboard' | 'dashboard' | 'capture' | 'review' | 'success'
 const interventionData = ref(null)
 const currentUser = ref(null)
+
+// --- Lógica de Roles ---
+const isAdmin = computed(() => {
+  if (!currentUser.value || !currentUser.value.email) return false
+  return currentUser.value.email.toLowerCase().includes('admin')
+})
 
 // --- Funciones de Flujo ---
 
 const handleLoginSuccess = (user) => {
   currentUser.value = user
-  currentStep.value = 'dashboard'
+  // Si es admin, le mostramos el menú para elegir módulo. Si no, va directo a grabar.
+  if (isAdmin.value) {
+    currentStep.value = 'role-select'
+  } else {
+    currentStep.value = 'dashboard'
+  }
 }
 
 const handleLogout = () => {
   currentUser.value = null
   currentStep.value = 'login'
+}
+
+const goToRoleSelect = () => {
+  currentStep.value = 'role-select'
 }
 
 const startNewIntervention = () => {
@@ -43,60 +59,95 @@ const returnToDashboard = () => {
 
 <template>
   <main class="app-background">
-    <!-- Capa de desenfoque para dar profundidad -->
     <div class="bg-overlay"></div>
 
     <div class="glass-card">
-      <!-- Encabezado Global (Oculto en el login para un diseño más limpio) -->
       <header class="app-header" v-if="currentStep !== 'login'">
         <div class="header-top">
           <div class="logo-mini">🌱</div>
-          <button v-if="currentStep === 'dashboard'" class="btn-logout" @click="handleLogout">Cerrar Sesión</button>
-          <button v-else-if="currentStep !== 'success'" class="btn-back" @click="returnToDashboard">Volver al Panel</button>
+          
+          <div class="header-actions">
+            <button 
+              v-if="isAdmin && (currentStep === 'dashboard' || currentStep === 'admin-dashboard')" 
+              class="btn-secondary-mini" 
+              @click="goToRoleSelect">
+              ⬅ Menú Módulos
+            </button>
+
+            <button 
+              v-else-if="currentStep === 'capture' || currentStep === 'review' || currentStep === 'success'" 
+              class="btn-back" 
+              @click="returnToDashboard">
+              Volver al Panel
+            </button>
+
+            <button class="btn-logout" @click="handleLogout">
+              Cerrar Sesión
+            </button>
+          </div>
         </div>
         <h1>Talita Kum</h1>
         <h2 class="subtitle">Asistente Clínico de Terreno</h2>
       </header>
 
-      <!-- PASO 0: Login Seguro -->
       <LoginView 
         v-if="currentStep === 'login'" 
         @on-login-success="handleLoginSuccess" 
       />
 
-      <!-- PASO 1: Panel de Gestión (Dashboard) -->
+      <div v-else-if="currentStep === 'role-select'" class="role-selector">
+        <h3>Selecciona un Módulo</h3>
+        <p>Como administrador, tienes acceso a la configuración global y al panel de terreno.</p>
+        
+        <div class="module-cards">
+          <button class="module-card" @click="currentStep = 'admin-dashboard'">
+            <span class="icon">📊</span>
+            <h4>Panel de Supervisión</h4>
+            <p>Métricas, gráficos de sistema y gestión del equipo clínico.</p>
+          </button>
+          
+          <button class="module-card" @click="currentStep = 'dashboard'">
+            <span class="icon">🎙️</span>
+            <h4>Panel de Terreno</h4>
+            <p>Registro de intervenciones asistidas por Inteligencia Artificial.</p>
+          </button>
+        </div>
+      </div>
+
+      <AdminDashboard 
+        v-else-if="currentStep === 'admin-dashboard'"
+        :user="currentUser"
+      />
+
       <DashboardView 
         v-else-if="currentStep === 'dashboard'"
         :user="currentUser"
         @on-new-intervention="startNewIntervention"
       />
 
-      <!-- PASO 2: Captura de Voz -->
       <AudioCapture 
         v-else-if="currentStep === 'capture'" 
         @on-processed="handleDataStructured" 
       />
 
-      <!-- PASO 3: Revisión de IA -->
       <InterventionReview 
         v-else-if="currentStep === 'review'" 
         :initial-data="interventionData"
         @on-saved="handleSaveSuccess" 
       />
 
-      <!-- PASO 4: Éxito -->
       <div v-else-if="currentStep === 'success'" class="success-screen">
         <div class="icon-success">✨</div>
         <h3>¡Registro Guardado!</h3>
         <p>La intervención ha sido documentada de forma segura en el historial del centro.</p>
-        <button class="btn-primary" @click="returnToDashboard">Volver al Panel de Casos</button>
+        <button class="btn-primary" @click="returnToDashboard">Hacer otro registro</button>
       </div>
     </div>
   </main>
 </template>
 
 <style scoped>
-/* Fondo con imagen de naturaleza abstracta y gradiente para transmitir paz y vida */
+/* (Se mantienen los estilos del fondo y el glassmorphism) */
 .app-background {
   min-height: 100vh;
   display: flex;
@@ -134,7 +185,6 @@ const returnToDashboard = () => {
   z-index: 1;
 }
 
-/* Tarjeta principal con Glassmorphism mejorado */
 .glass-card {
   position: relative;
   z-index: 2;
@@ -160,8 +210,28 @@ const returnToDashboard = () => {
   margin-bottom: 15px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .logo-mini {
   font-size: 2rem;
+}
+
+.btn-secondary-mini {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary-mini:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 .btn-logout, .btn-back {
@@ -200,6 +270,67 @@ const returnToDashboard = () => {
   color: #6ee7b7;
 }
 
+/* --- ESTILOS DEL NUEVO MENÚ DE ROLES --- */
+.role-selector {
+  text-align: center;
+  animation: fadeIn 0.4s ease;
+}
+
+.role-selector h3 {
+  font-size: 1.4rem;
+  margin-bottom: 5px;
+}
+
+.role-selector p {
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 20px;
+}
+
+.module-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.module-card {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 20px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.module-card:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-3px);
+  border-color: #6ee7b7;
+}
+
+.module-card .icon {
+  font-size: 3rem;
+  margin-bottom: 10px;
+}
+
+.module-card h4 {
+  margin: 0 0 5px 0;
+  font-size: 1.2rem;
+  color: #6ee7b7;
+}
+
+.module-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.4;
+}
+
+/* Éxito y botones generales */
 .success-screen {
   animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }

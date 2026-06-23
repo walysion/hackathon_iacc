@@ -12,6 +12,9 @@ const loginStep = ref('credentials') // 'credentials' | '2fa'
 const isLoading = ref(false)
 const errorMessage = ref('')
 
+// Almacenamos temporalmente el usuario real de Firebase entre pasos
+const pendingFirebaseUser = ref(null)
+
 // Login Real con Firebase
 const handleLogin = async () => {
   isLoading.value = true
@@ -19,7 +22,10 @@ const handleLogin = async () => {
   
   try {
     // Intentamos iniciar sesión con la base de datos real
-    await signInWithEmailAndPassword(auth, email.value, password.value)
+    const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value)
+    
+    // Guardamos la instancia del usuario de Firebase para usar su UID después
+    pendingFirebaseUser.value = userCredential.user
     
     // Si la contraseña y correo son correctos en Firebase, pasamos al 2FA
     loginStep.value = '2fa'
@@ -37,6 +43,11 @@ const handleLogin = async () => {
   }
 }
 
+// Filtra caracteres no numéricos en el input 2FA
+const filterNumeric = (event) => {
+  twoFactorCode.value = event.target.value.replace(/\D/g, '')
+}
+
 // Simulación de validación de Doble Factor (2FA) y Asignación de Roles
 const handle2FA = async () => {
   isLoading.value = true
@@ -48,16 +59,26 @@ const handle2FA = async () => {
     // REGLA DE NEGOCIO: Si el correo contiene "admin", es Jefatura Global (Super Admin)
     const isCtrlAdmin = email.value.toLowerCase().includes('admin')
     
+    // Emitimos el evento fusionando los datos simulados con el objeto real de Firebase
     emit('onLoginSuccess', { 
+      ...pendingFirebaseUser.value, // Incluye UID, token, etc.
       email: email.value, 
       role: isCtrlAdmin ? 'admin' : 'terapeuta', 
       name: isCtrlAdmin ? 'Dirección Talita Kum' : 'Dr. Ángel Ramos'
     })
   } else {
-    errorMessage.value = 'Código de seguridad incorrecto.'
+    errorMessage.value = 'Código de seguridad incorrecto. Debe contener 6 dígitos.'
   }
   
   isLoading.value = false
+}
+
+// Cancelar 2FA y volver atrás
+const cancel2FA = () => {
+  loginStep.value = 'credentials'
+  twoFactorCode.value = ''
+  errorMessage.value = ''
+  pendingFirebaseUser.value = null
 }
 </script>
 
@@ -73,13 +94,25 @@ const handle2FA = async () => {
       <!-- PASO 1: Credenciales -->
       <form v-if="loginStep === 'credentials'" @submit.prevent="handleLogin" class="form-layout">
         <div class="form-group">
-          <label>Correo Institucional</label>
-          <input type="email" v-model="email" placeholder="ejemplo@fundacion.cl" required />
+          <label for="emailInput">Correo Institucional</label>
+          <input 
+            id="emailInput"
+            type="email" 
+            v-model="email" 
+            placeholder="ejemplo@fundacion.cl" 
+            required 
+          />
         </div>
 
         <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" v-model="password" placeholder="••••••••" required />
+          <label for="passwordInput">Contraseña</label>
+          <input 
+            id="passwordInput"
+            type="password" 
+            v-model="password" 
+            placeholder="••••••••" 
+            required 
+          />
         </div>
 
         <button type="submit" class="btn-primary" :disabled="isLoading">
@@ -95,13 +128,28 @@ const handle2FA = async () => {
         <p class="instruction-2fa">Hemos enviado un código de 6 dígitos a tu dispositivo móvil registrado para evitar accesos no autorizados.</p>
         
         <div class="form-group">
-          <input type="text" v-model="twoFactorCode" maxlength="6" placeholder="000000" class="input-2fa" required />
+          <input 
+            type="text" 
+            v-model="twoFactorCode" 
+            @input="filterNumeric"
+            inputmode="numeric"
+            pattern="[0-9]{6}"
+            maxlength="6" 
+            placeholder="000000" 
+            class="input-2fa" 
+            required 
+          />
         </div>
 
-        <button type="submit" class="btn-primary" :disabled="isLoading">
-          <span v-if="isLoading">Validando Token...</span>
-          <span v-else>Verificar Identidad</span>
-        </button>
+        <div class="button-group">
+          <button type="button" class="btn-secondary" @click="cancel2FA" :disabled="isLoading">
+            Volver
+          </button>
+          <button type="submit" class="btn-primary" :disabled="isLoading">
+            <span v-if="isLoading">Validando Token...</span>
+            <span v-else>Verificar Identidad</span>
+          </button>
+        </div>
       </form>
 
       <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
@@ -182,6 +230,12 @@ input:focus {
   background: rgba(0, 0, 0, 0.4);
 }
 
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;
@@ -191,13 +245,30 @@ input:focus {
   font-size: 1.1rem;
   font-weight: bold;
   cursor: pointer;
-  margin-top: 10px;
+  flex: 2;
   transition: all 0.3s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 15px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  flex: 1;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .step-2fa {
