@@ -1,0 +1,52 @@
+Talita Kum es una plataforma web desarrollada para la Fundación Cristo Vive, diseñada para optimizar la recolección y análisis de datos en terreno mediante intervención clínica asistida por Inteligencia Artificial. La aplicación permite a terapeutas documentar casos mediante voz y ofrece a la administración un panel de Business Intelligence (BI) para la toma de decisiones.
+
+2. Tecnologías (Stack Tecnológico)
+Frontend: Vue.js 3 (Composition API) con Vite como empaquetador.
+
+Autenticación y Backend: Firebase Authentication (Módulo de Email/Password).
+
+Visualización de Datos: Chart.js junto con vue-chartjs para gráficos interactivos.
+
+Estilos y UI: CSS nativo utilizando Glassmorphism (blur y transparencias) para una interfaz moderna.
+
+Despliegue: Preparado para Netlify.
+
+3. Arquitectura del Sistema
+El sistema se rige por un componente raíz (App.vue) que funciona como un orquestador de estado.
+
+Flujo de Usuario y Roles
+El sistema identifica al usuario tras el login para determinar qué vista mostrar:
+
+Terapeuta: Accede a DashboardView.vue. Sus capacidades incluyen la grabación por voz (AudioCapture.vue) y revisión de datos estructurados por IA (InterventionReview.vue).
+
+Super Admin: Accede a AdminDashboard.vue. Sus capacidades incluyen la visualización de métricas globales, gráficos de estado de casos y gestión de nuevos usuarios.
+
+4. Estructura de Archivos
+src/firebase.js: Configuración de inicialización del proyecto Firebase (apiKey, authDomain, etc.).
+
+src/App.vue: Maneja la navegación (currentStep) y la inyección condicional de componentes (AdminDashboard vs DashboardView).
+
+src/components/LoginView.vue: Interfaz de autenticación con doble factor simulado y lógica de enrutamiento por rol (detecta el rol por la presencia de "admin" en el correo).
+
+src/components/DashboardView.vue: Panel del terapeuta con métricas individuales y botón de intervención.
+
+src/components/AdminDashboard.vue: Panel de jefatura con gráficos de dona, métricas de KPI y CRUD simulado de usuarios.
+
+5. Implementación del Login y Seguridad
+Validación: Se utiliza signInWithEmailAndPassword de Firebase para validar credenciales reales.
+
+Doble Factor (2FA): Implementado como una simulación estratégica de UI que requiere un token de 6 dígitos para completar el flujo, diseñado para presentaciones ejecutivas.
+
+Seguridad: Las rutas y vistas están protegidas por el estado centralizado currentUser en App.vue.
+
+6. Estado Actual y Próximos Pasos (Hoja de Ruta)
+Estado: El sistema está funcional localmente con autenticación real de Firebase y separación lógica de roles.
+
+Paso Inmediato: Realizar el despliegue a producción mediante Netlify.
+
+Futuro: Integración de la API de Whisper (OpenAI) para la transcripción real y un modelo LLM para la estructuración clínica.
+
+Instrucciones para el Futuro Colaborador (IA)
+Cuando inicies una nueva sesión, presenta este documento inmediatamente.
+
+"Actúa como un desarrollador Senior experto en Vue.js, Firebase y arquitectura de sistemas. Estamos trabajando en el proyecto 'Talita Kum' para la Fundación Cristo Vive. La arquitectura está definida en el documento de documentación técnica previo. Actualmente, debemos proceder con [insertar tarea: ej. despliegue, optimización de IA, etc.]".

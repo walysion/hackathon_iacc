@@ -1,19 +1,43 @@
 <script setup>
 import { ref } from 'vue'
+import LoginView from './components/LoginView.vue'
+import DashboardView from './components/DashboardView.vue'
 import AudioCapture from './components/AudioCapture.vue'
 import InterventionReview from './components/InterventionReview.vue'
 
-const currentStep = ref('capture')
+// Control de navegación de la aplicación
+const currentStep = ref('login') // 'login' | 'dashboard' | 'capture' | 'review' | 'success'
 const interventionData = ref(null)
+const currentUser = ref(null)
+
+// --- Funciones de Flujo ---
+
+const handleLoginSuccess = (user) => {
+  currentUser.value = user
+  currentStep.value = 'dashboard'
+}
+
+const handleLogout = () => {
+  currentUser.value = null
+  currentStep.value = 'login'
+}
+
+const startNewIntervention = () => {
+  currentStep.value = 'capture'
+}
 
 const handleDataStructured = (data) => {
   interventionData.value = data
   currentStep.value = 'review'
 }
 
-const resetApp = () => {
+const handleSaveSuccess = () => {
+  currentStep.value = 'success'
+}
+
+const returnToDashboard = () => {
   interventionData.value = null
-  currentStep.value = 'capture'
+  currentStep.value = 'dashboard'
 }
 </script>
 
@@ -23,35 +47,49 @@ const resetApp = () => {
     <div class="bg-overlay"></div>
 
     <div class="glass-card">
-      <header class="app-header">
-        <div class="logo-icon">🌱</div>
+      <!-- Encabezado Global (Oculto en el login para un diseño más limpio) -->
+      <header class="app-header" v-if="currentStep !== 'login'">
+        <div class="header-top">
+          <div class="logo-mini">🌱</div>
+          <button v-if="currentStep === 'dashboard'" class="btn-logout" @click="handleLogout">Cerrar Sesión</button>
+          <button v-else-if="currentStep !== 'success'" class="btn-back" @click="returnToDashboard">Volver al Panel</button>
+        </div>
         <h1>Talita Kum</h1>
         <h2 class="subtitle">Asistente Clínico de Terreno</h2>
-        
-        <!-- Texto de contexto clave para que cualquiera entienda la app -->
-        <p class="context-text" v-if="currentStep === 'capture'">
-          Herramienta exclusiva para el equipo terapéutico. 
-          Registra tus intervenciones de rehabilitación en segundos, 
-          sin interrumpir el acompañamiento de tus usuarios.
-        </p>
       </header>
 
+      <!-- PASO 0: Login Seguro -->
+      <LoginView 
+        v-if="currentStep === 'login'" 
+        @on-login-success="handleLoginSuccess" 
+      />
+
+      <!-- PASO 1: Panel de Gestión (Dashboard) -->
+      <DashboardView 
+        v-else-if="currentStep === 'dashboard'"
+        :user="currentUser"
+        @on-new-intervention="startNewIntervention"
+      />
+
+      <!-- PASO 2: Captura de Voz -->
       <AudioCapture 
-        v-if="currentStep === 'capture'" 
+        v-else-if="currentStep === 'capture'" 
         @on-processed="handleDataStructured" 
       />
 
+      <!-- PASO 3: Revisión de IA -->
       <InterventionReview 
         v-else-if="currentStep === 'review'" 
         :initial-data="interventionData"
-        @on-saved="currentStep = 'success'" 
+        @on-saved="handleSaveSuccess" 
       />
 
+      <!-- PASO 4: Éxito -->
       <div v-else-if="currentStep === 'success'" class="success-screen">
         <div class="icon-success">✨</div>
         <h3>¡Registro Guardado!</h3>
         <p>La intervención ha sido documentada de forma segura en el historial del centro.</p>
-        <button class="btn-primary" @click="resetApp">Nueva Intervención</button>
+        <button class="btn-primary" @click="returnToDashboard">Volver al Panel de Casos</button>
       </div>
     </div>
   </main>
@@ -66,11 +104,10 @@ const resetApp = () => {
   align-items: center;
   padding: 20px;
   position: relative;
-  background: linear-gradient(135deg, #134e5e, #71b280); /* Tonos bosque y sanación */
+  background: linear-gradient(135deg, #134e5e, #71b280);
   overflow: hidden;
 }
 
-/* Efecto de luz suave moviéndose de fondo (Micro-interacción pasiva) */
 .app-background::before {
   content: '';
   position: absolute;
@@ -101,41 +138,51 @@ const resetApp = () => {
 .glass-card {
   position: relative;
   z-index: 2;
-  background: rgba(20, 30, 40, 0.65); /* Un poco más oscuro para que el texto resalte */
+  background: rgba(20, 30, 40, 0.65);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 24px;
-  padding: 40px 30px;
+  padding: 30px 25px;
   width: 100%;
-  max-width: 450px;
+  max-width: 480px;
   box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
   color: white;
   text-align: center;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
 }
 
-/* Micro-interacción: la tarjeta "flota" suavemente al pasar el mouse (si están en PC) */
-.glass-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 30px 50px rgba(0, 0, 0, 0.4);
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.logo-mini {
+  font-size: 2rem;
+}
+
+.btn-logout, .btn-back {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-logout:hover, .btn-back:hover {
+  background: rgba(255,255,255,0.2);
 }
 
 .app-header {
   margin-bottom: 1.5rem;
   padding-bottom: 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.logo-icon {
-  font-size: 3.5rem;
-  margin-bottom: 10px;
-  animation: gentleBounce 3s infinite ease-in-out;
-}
-
-@keyframes gentleBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
 }
 
 .app-header h1 {
@@ -147,22 +194,10 @@ const resetApp = () => {
 }
 
 .subtitle {
-  margin: 5px 0 15px 0;
+  margin: 5px 0 0 0;
   font-size: 1.1rem;
   font-weight: 400;
-  color: #6ee7b7; /* Verde esmeralda claro */
-}
-
-/* Texto de contexto para educar al usuario/jurado */
-.context-text {
-  font-size: 0.95rem;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.2);
-  padding: 15px;
-  border-radius: 12px;
-  margin: 0;
-  border-left: 3px solid #6ee7b7;
+  color: #6ee7b7;
 }
 
 .success-screen {
