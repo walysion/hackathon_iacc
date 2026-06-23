@@ -53,6 +53,7 @@ const chartOptions = ref({
 // --- ESTADO: CRUD Simulado de Terapeutas ---
 const newTherapistName = ref('')
 const newTherapistEmail = ref('')
+const isCreating = ref(false) // Nuevo estado para controlar la carga
 
 const therapists = ref([
   { id: 1, name: 'Dr. Ángel Ramos', email: 'aramos@talitakum.cl', status: 'Activo' },
@@ -60,21 +61,65 @@ const therapists = ref([
   { id: 3, name: 'Ts. Luis Medina', email: 'lmedina@talitakum.cl', status: 'Inactivo' }
 ])
 
-const addTherapist = () => {
+// Generador de contraseña segura aleatoria
+const generatePassword = () => {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$*"
+  let pass = ""
+  for (let i = 0; i < 10; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return pass
+}
+
+// Función que simula la creación, genera la clave y prepara el correo
+const addTherapist = async () => {
   if (newTherapistName.value && newTherapistEmail.value) {
-    therapists.value.push({
+    isCreating.value = true
+    
+    // Simulamos la llamada a la base de datos (Backend)
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    // 1. Generamos la contraseña
+    const generatedPassword = generatePassword()
+
+    // 2. Añadimos el usuario a la interfaz
+    therapists.value.unshift({
       id: Date.now(),
       name: newTherapistName.value,
       email: newTherapistEmail.value,
       status: 'Activo'
     })
+
+    // 3. Preparamos el correo automático con las credenciales
+    const emailSubject = encodeURIComponent("Tus credenciales de acceso - Talita Kum")
+    const emailBody = encodeURIComponent(
+      `Hola ${newTherapistName.value},\n\n` +
+      `Has sido registrado exitosamente en la plataforma de asistencia clínica Talita Kum.\n\n` +
+      `Tus credenciales de acceso son las siguientes:\n` +
+      `👤 Correo: ${newTherapistEmail.value}\n` +
+      `🔑 Contraseña temporal: ${generatedPassword}\n\n` +
+      `Por favor, ingresa al sistema y cambia tu contraseña lo antes posible.\n\n` +
+      `Saludos cordiales,\nDirección Talita Kum.`
+    )
+
+    // 4. Disparamos la apertura del cliente de correo del administrador
+    window.location.href = `mailto:${newTherapistEmail.value}?subject=${emailSubject}&body=${emailBody}`
+
+    // 5. Incrementamos los KPIs para que se vea dinámico
+    kpis.value.activeCases += 1
+    kpis.value.totalInterventions += 1
+
+    // Limpiamos el formulario
     newTherapistName.value = ''
     newTherapistEmail.value = ''
+    isCreating.value = false
   }
 }
 
 const removeTherapist = (id) => {
   therapists.value = therapists.value.filter(t => t.id !== id)
+  // Disminuimos el KPI de casos activos simulando la baja
+  kpis.value.activeCases -= 1
 }
 </script>
 
@@ -85,7 +130,6 @@ const removeTherapist = (id) => {
       <p class="welcome-text">Bienvenido, <strong>{{ user?.name || user?.email }}</strong></p>
     </div>
 
-    <!-- SECCIÓN 1: KPIs -->
     <div class="kpi-grid">
       <div class="kpi-card">
         <span class="kpi-value">{{ kpis.totalInterventions }}</span>
@@ -105,7 +149,6 @@ const removeTherapist = (id) => {
       </div>
     </div>
 
-    <!-- SECCIÓN 2: Gráfico (Chart.js) -->
     <div class="chart-section glass-panel">
       <h3>Distribución de Casos</h3>
       <div class="chart-container">
@@ -113,18 +156,19 @@ const removeTherapist = (id) => {
       </div>
     </div>
 
-    <!-- SECCIÓN 3: Gestión de Equipo (CRUD) -->
     <div class="team-section glass-panel">
       <h3>Gestión de Terapeutas</h3>
       
-      <!-- Formulario para agregar -->
       <form @submit.prevent="addTherapist" class="add-therapist-form">
-        <input type="text" v-model="newTherapistName" placeholder="Nombre completo" required />
-        <input type="email" v-model="newTherapistEmail" placeholder="Correo institucional" required />
-        <button type="submit" class="btn-add">Agregar</button>
+        <input type="text" v-model="newTherapistName" placeholder="Nombre completo" required :disabled="isCreating" />
+        <input type="email" v-model="newTherapistEmail" placeholder="Correo institucional" required :disabled="isCreating" />
+        
+        <button type="submit" class="btn-add" :disabled="isCreating">
+          <span v-if="isCreating">Generando credenciales...</span>
+          <span v-else>➕ Crear Usuario y Enviar Clave</span>
+        </button>
       </form>
 
-      <!-- Lista de Terapeutas -->
       <ul class="therapist-list">
         <li v-for="therapist in therapists" :key="therapist.id" class="therapist-item">
           <div class="therapist-info">
@@ -267,19 +311,32 @@ const removeTherapist = (id) => {
   border-color: #10b981;
 }
 
+.add-therapist-form input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-add {
-  background: #10b981;
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
-  padding: 10px;
+  padding: 12px;
   border-radius: 8px;
   font-weight: bold;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
-.btn-add:hover {
-  background: #059669;
+.btn-add:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-add:disabled {
+  background: #4b5563;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 /* Lista de usuarios */
@@ -300,6 +357,7 @@ const removeTherapist = (id) => {
   padding: 12px;
   border-radius: 8px;
   border-left: 3px solid #10b981;
+  animation: slideIn 0.3s ease;
 }
 
 .therapist-info {
@@ -352,5 +410,10 @@ const removeTherapist = (id) => {
 
 .btn-delete:hover {
   transform: scale(1.2);
+}
+
+@keyframes slideIn { 
+  from { opacity: 0; transform: translateX(-10px); } 
+  to { opacity: 1; transform: translateX(0); } 
 }
 </style>

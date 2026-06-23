@@ -1,0 +1,22 @@
+Usabilidad y Trabajo en Terreno (Offline First)
+1. Soporte PWA (Progressive Web App) y Modo Offline: Los terapeutas en terreno suelen trabajar en zonas con mala conectividad (campamentos, zonas rurales, interiores de hogares). Convertir la app en una PWA permitirá que se instale en el celular como una app nativa y, usando IndexedDB, guarde las grabaciones de voz y borradores de forma local para sincronizarlos automáticamente con Firebase apenas recuperen señal.
+
+2. Compresión de Audio Nativa antes del Envío: Los archivos de audio crudos pesan mucho y consumen los datos móviles del equipo clínico. Implementar un módulo de compresión en el cliente (como codificación a OGG/MP3 de baja tasa de bits en AudioCapture.vue) optimizará drásticamente el ancho de banda.
+
+3. Exportación de Informes en PDF: Añadir un botón en la pantalla de éxito que permita descargar la intervención estructurada en un formato PDF membretado e institucional, listo para imprimir o adjuntar a las fichas físicas tradicionales de la fundación.
+
+🤖 Inteligencia Artificial y Backend Real
+4. Migración a Firebase Firestore (Base de Datos Real): Sustituir el estado local de actividades por una base de datos reactiva en la nube. Al guardar una intervención, esta se escribirá en una colección /intervenciones, permitiendo que el panel del administrador se actualice en tiempo real sin necesidad de recargar la página.
+
+5. Integración de Whisper y LLM vía Firebase Functions: Para la fase 2 de IA, no podemos llamar a OpenAI directamente desde el frontend porque expondría las API Keys. Debemos centralizar el procesamiento en funciones seguras de backend (Cloud Functions), donde el audio se envíe, Whisper lo transcriba y un prompt optimizado de GPT-4o estructure los datos clínicos.
+
+6. Plantillas Dinámicas según el Tipo de Intervención: No todas las intervenciones en terreno son iguales (una contención de crisis es distinta a un seguimiento de adicciones). Implementar un selector en el Dashboard para que el terapeuta elija la plantilla, modificando dinámicamente los campos que la IA debe rellenar en InterventionReview.vue.
+
+🔒 Seguridad, Privacidad y Gestión Macro
+7. Anonimización de Datos Sensibles (Filtro PII) en la IA: Por ética y secreto profesional clínico, no deberíamos enviar nombres de pacientes o direcciones reales a las APIs comerciales de OpenAI. Podemos crear un script intermedio que detecte nombres propios en la transcripción y los reemplace por marcadores como [PACIENTE_1] antes de procesarlos con el LLM.
+
+8. Activación de Multi-Factor Authentication (MFA) Real: Pasar de nuestra excelente simulación ejecutiva de 2FA a la solución nativa de Firebase Auth para exigir la verificación real del token mediante SMS o códigos de aplicaciones como Google Authenticator.
+
+9. Logs de Auditoría para Administradores: En el panel de jefatura, añadir una sección de trazabilidad estricta. Al tratarse de datos de salud confidenciales, el sistema debe registrar exactamente qué usuario vio, editó o eliminó un registro clínico y en qué fecha.
+
+10. Alertas Críticas Automatizadas: Entrenar al LLM para que, si detecta palabras clave de alto riesgo en el desarrollo de la intervención (ej. ideación suicida, violencia intrafamiliar activa), marque automáticamente la tarjeta con un flag rojo y dispare una notificación push inmediata al panel del Super Admin para intervención de la jefatura.
