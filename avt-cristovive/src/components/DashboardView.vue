@@ -16,17 +16,18 @@ const props = defineProps({
 // Emitimos el evento para avisarle a App.vue que inicie el flujo de captura
 const emit = defineEmits(['onNewIntervention'])
 
-// Función que dispara la transición a la pantalla de captura de voz
+// Función que dispara la transición a la pantalla de captura (ahora pasa al selector de plantillas)
 const startIntervention = () => {
   emit('onNewIntervention')
 }
 
 // --- ESTADO: Estadísticas Dinámicas basadas en la lista global ---
-// Se calculan automáticamente según el tamaño del arreglo 'activities'
+// Se calculan automáticamente según el tamaño del arreglo 'activities' y la sincronización
 const stats = computed(() => {
   return {
     sessionsToday: props.activities.length,
-    pendingSync: props.activities.filter(a => a.status === 'Pendiente IA').length,
+    // Actualizado al nuevo estado Offline-First de nuestra arquitectura
+    pendingSync: props.activities.filter(a => a.status === 'Pendiente de Red').length,
     weeklyTotal: props.activities.length + 13 // +13 es un dato simulado base para la semana
   }
 })
@@ -37,7 +38,8 @@ const stats = computed(() => {
   <div class="therapist-dashboard scrollable-container">
     <div class="dashboard-header">
       <h2>Panel de Trabajo</h2>
-      <p class="welcome-text">Hola, <strong>{{ user?.name || 'Terapeuta' }}</strong></p>
+      <!-- Fallback inteligente: si no hay name, muestra el email, y si no, 'Terapeuta' -->
+      <p class="welcome-text">Hola, <strong>{{ user?.name || user?.email || 'Terapeuta' }}</strong></p>
     </div>
 
     <div class="action-section">
@@ -53,9 +55,10 @@ const stats = computed(() => {
         <span class="stat-value">{{ stats.sessionsToday }}</span>
         <span class="stat-label">Sesiones Hoy</span>
       </div>
+      <!-- Esta tarjeta solo aparece si hay registros esperando internet para subir a Firebase -->
       <div class="stat-card alert-card" v-if="stats.pendingSync > 0">
         <span class="stat-value">{{ stats.pendingSync }}</span>
-        <span class="stat-label">Por Revisar</span>
+        <span class="stat-label">Pendientes Red</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ stats.weeklyTotal }}</span>
@@ -65,8 +68,9 @@ const stats = computed(() => {
 
     <div class="activity-section glass-panel">
       <h3>Actividad Reciente</h3>
-      <ul class="activity-list">
-        <!-- Iteramos sobre la lista dinámica (activities) en lugar de la estática -->
+      
+      <!-- Mostramos la lista si hay actividades -->
+      <ul class="activity-list" v-if="activities.length > 0">
         <li v-for="activity in activities" :key="activity.id" class="activity-item">
           <div class="activity-info">
             <span class="activity-type">{{ activity.type }}</span>
@@ -77,6 +81,13 @@ const stats = computed(() => {
           </span>
         </li>
       </ul>
+
+      <!-- Estado vacío (Empty State) si el terapeuta no tiene registros -->
+      <div v-else class="empty-state">
+        <span class="empty-icon">📂</span>
+        <p>Aún no hay registros de intervenciones en la nube.</p>
+        <small>Tus próximas grabaciones aparecerán aquí.</small>
+      </div>
     </div>
   </div>
 </template>
@@ -187,6 +198,12 @@ const stats = computed(() => {
 .alert-card {
   border-color: rgba(245, 158, 11, 0.5);
   background: rgba(245, 158, 11, 0.1);
+  animation: pulseOffline 2s infinite;
+}
+
+@keyframes pulseOffline {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  50% { box-shadow: 0 0 10px 0 rgba(245, 158, 11, 0.3); }
 }
 
 .stat-value {
@@ -271,5 +288,36 @@ const stats = computed(() => {
 .status-pending {
   background: rgba(245, 158, 11, 0.15);
   color: #fbbf24;
+}
+
+/* Estilos de Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 30px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+  opacity: 0.7;
+}
+
+.empty-state p {
+  margin: 0 0 5px 0;
+  color: white;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.empty-state small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
 }
 </style>

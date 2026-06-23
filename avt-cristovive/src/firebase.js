@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore"; // <-- NUEVA IMPORTACIÓN
 
 // Tu configuración real de Firebase para el proyecto Talita Kum
 const firebaseConfig = {
@@ -15,7 +16,9 @@ const firebaseConfig = {
 // Inicializar la aplicación de Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inicializar el módulo de Autenticación y exportarlo
+// Inicializar Autenticación y Base de Datos
 const auth = getAuth(app);
+const db = getFirestore(app); // <-- INICIALIZAMOS LA BASE DE DATOS
 
-export { auth };
+// Exportamos ambas herramientas para usarlas en la app
+export { auth, db };

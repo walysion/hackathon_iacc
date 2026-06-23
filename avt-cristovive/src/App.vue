@@ -1,33 +1,123 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+// --- IMPORTACIÓN DE COMPONENTES ---
 import LoginView from './components/LoginView.vue'
 import DashboardView from './components/DashboardView.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import AudioCapture from './components/AudioCapture.vue'
 import InterventionReview from './components/InterventionReview.vue'
 
-// Control de navegación ampliado: agregamos 'role-select' y 'admin-dashboard'
-const currentStep = ref('login') // 'login' | 'role-select' | 'admin-dashboard' | 'dashboard' | 'capture' | 'review' | 'success'
+// Nuevos componentes modulares
+import SecurityMfa from './components/SecurityMfa.vue'
+import InterventionTypeSelector from './components/InterventionTypeSelector.vue'
+import PrivacyAnonymizer from './components/PrivacyAnonymizer.vue'
+import CriticalAlertModal from './components/CriticalAlertModal.vue'
+import PdfGenerator from './components/PdfGenerator.vue'
+
+// Servicios de Base de Datos
+import { saveInterventionToCloud, getInterventionsFromCloud } from './services/database.js'
+
+// --- CONTROL DE NAVEGACIÓN EXTENDIDO ---
+// Pasos: 'login' | 'mfa' | 'role-select' | 'admin-dashboard' | 'dashboard' | 'type-select' | 'capture' | 'privacy' | 'review' | 'success'
+const currentStep = ref('login') 
 const interventionData = ref(null)
 const currentUser = ref(null)
 
-// --- ESTADO GLOBAL: Historial de actividades dinámico ---
-// Esto permite que lo que grabes se vea reflejado en el Dashboard
-const globalActivities = ref([
-  { id: 1, type: 'Visita Domiciliaria', time: 'Hoy, 10:30 AM', status: 'Sincronizado' }
-])
+// --- ESTADOS INTERMEDIOS (NUEVOS) ---
+const selectedTemplate = ref('')
+const rawTranscript = ref('')
+const showCriticalAlert = ref(false)
+const detectedKeywords = ref([])
 
-// --- Lógica de Roles ---
+// --- ESTADO DE RED (OFFLINE / ONLINE) ---
+const isOnline = ref(navigator.onLine)
+
+// --- ESTADO GLOBAL: Historial de actividades dinámico ---
+const globalActivities = ref([])
+
+// --- DETECTOR DINÁMICO DE CONEXIÓN ---
+const updateOnlineStatus = () => {
+  isOnline.value = navigator.onLine
+  if (isOnline.value) {
+    syncOfflineDrafts()
+  }
+}
+
+// Escuchamos los eventos del navegador al montar el componente
+onMounted(async () => {
+  window.addEventListener('online', updateOnlineStatus)
+  window.addEventListener('offline', updateOnlineStatus)
+  
+  // 1. Cargar historial local primero (Offline First)
+  const savedActivities = localStorage.getItem('talitakum_activities')
+  if (savedActivities) {
+    globalActivities.value = JSON.parse(savedActivities)
+  }
+  
+  // 2. Si hay internet, traemos los datos reales de Firebase
+  if (isOnline.value) {
+    try {
+      const dbRes = await getInterventionsFromCloud()
+      if (dbRes.success && dbRes.data.length > 0) {
+        // Formateamos los datos de la nube para el dashboard
+        const formattedData = dbRes.data.map(doc => ({
+          id: doc.id,
+          type: doc.objetivo || 'Intervención Asistida',
+          time: doc.createdAt?.toDate().toLocaleString('es-CL') || 'Reciente',
+          status: doc.syncStatus || 'Sincronizado'
+        }))
+        globalActivities.value = formattedData
+        localStorage.setItem('talitakum_activities', JSON.stringify(formattedData))
+      }
+    } catch (e) {
+      console.log("Aviso: Ejecutando en modo puramente local (Firebase no configurado aún).")
+    }
+    syncOfflineDrafts()
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('online', updateOnlineStatus)
+  window.removeEventListener('offline', updateOnlineStatus)
+})
+
+// --- LÓGICA DE ROLES ---
 const isAdmin = computed(() => {
   if (!currentUser.value || !currentUser.value.email) return false
   return currentUser.value.email.toLowerCase().includes('admin')
 })
 
-// --- Funciones de Flujo ---
+// --- MOTOR DE SINCRONIZACIÓN OFFLINE ---
+const syncOfflineDrafts = async () => {
+  const pendingDrafts = globalActivities.value.filter(act => act.status === 'Pendiente de Red')
+  if (pendingDrafts.length === 0) return
+
+  console.log(`[Sync] Sincronizando ${pendingDrafts.length} registros con la nube...`)
+
+  for (let act of pendingDrafts) {
+    try {
+      // Intentamos subir a la nube
+      await saveInterventionToCloud(act.rawData, currentUser.value?.email || 'offline_user')
+      act.status = 'Sincronizado'
+      act.time = 'Sincronizado automáticamente'
+      delete act.rawData // Limpiamos el payload pesado
+    } catch (e) {
+      console.error("Fallo al sincronizar borrador", e)
+    }
+  }
+
+  localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
+}
+
+// --- FUNCIONES DE FLUJO Y NAVEGACIÓN MÁSTER ---
 
 const handleLoginSuccess = (user) => {
   currentUser.value = user
-  // Si es admin, le mostramos el menú para elegir módulo. Si no, va directo a grabar.
+  currentStep.value = 'mfa' // Ahora pasamos al 2FA obligatorio
+}
+
+const handleMfaVerified = () => {
   if (isAdmin.value) {
     currentStep.value = 'role-select'
   } else {
@@ -45,28 +135,91 @@ const goToRoleSelect = () => {
 }
 
 const startNewIntervention = () => {
-  currentStep.value = 'capture'
+  currentStep.value = 'type-select' // Vamos al selector de plantillas primero
 }
 
-const handleDataStructured = (data) => {
-  interventionData.value = data
+const handleTypeSelected = (typeId) => {
+  selectedTemplate.value = typeId
+  currentStep.value = 'capture' // Luego a grabar
+}
+
+// Cuando el micrófono devuelve el texto crudo
+const handleRawProcessed = (text) => {
+  rawTranscript.value = text
+  
+  // MOTOR DE ALERTAS CRÍTICAS (Busca palabras clave SOS)
+  const dangerWords = ['suicidio', 'arma', 'violencia', 'abuso', 'matar', 'golpe']
+  const textLower = text.toLowerCase()
+  const foundKeywords = dangerWords.filter(word => textLower.includes(word))
+
+  if (foundKeywords.length > 0) {
+    detectedKeywords.value = foundKeywords
+    showCriticalAlert.value = true // Levantamos el modal
+  } else {
+    currentStep.value = 'privacy' // Directo al filtro PII
+  }
+}
+
+// Respuestas del Modal Crítico
+const handleAlertDismiss = () => {
+  showCriticalAlert.value = false
+  currentStep.value = 'privacy'
+}
+
+const handleAlertEscalate = () => {
+  showCriticalAlert.value = false
+  currentStep.value = 'privacy' // Continúa el flujo tras notificar
+}
+
+// Cuando el anonimizador devuelve el texto limpio
+const handlePrivacySanitized = (safeText) => {
+  // Simulamos la respuesta estructurada de la IA usando la plantilla elegida
+  interventionData.value = {
+    objetivo: `Abordaje clínico (${selectedTemplate.value.toUpperCase()})`,
+    desarrollo: safeText,
+    acuerdos: 'Por definir con el paciente.',
+    acciones: 'Monitoreo y seguimiento programado.',
+    observaciones: 'Evaluación generada por IA (Privacidad Protegida).'
+  }
   currentStep.value = 'review'
 }
 
-// AQUÍ RECIBIMOS LOS DATOS Y LOS GUARDAMOS EN EL HISTORIAL
-const handleSaveSuccess = (savedData) => {
-  // Añadimos la nueva intervención al inicio de la lista
-  globalActivities.value.unshift({
+// Guardado Final en Nube o Local
+const handleSaveSuccess = async (savedData) => {
+  if (savedData) interventionData.value = savedData
+
+  const currentStatus = isOnline.value ? 'Sincronizado' : 'Pendiente de Red'
+  const currentTime = isOnline.value ? 'Justo ahora' : 'Guardado en modo local'
+
+  const newActivity = {
     id: Date.now(),
-    type: 'Intervención Asistida (IA)',
-    time: 'Justo ahora',
-    status: 'Sincronizado'
-  })
+    type: interventionData.value.objetivo,
+    time: currentTime,
+    status: currentStatus,
+    rawData: currentStatus === 'Pendiente de Red' ? interventionData.value : null
+  }
+
+  // Si hay internet, guardamos en la base de datos real
+  if (isOnline.value) {
+    try {
+      await saveInterventionToCloud(interventionData.value, currentUser.value?.email)
+    } catch (e) {
+      console.log("Guardado en nube falló, usando local.")
+      newActivity.status = 'Pendiente de Red'
+      newActivity.rawData = interventionData.value
+    }
+  }
+
+  globalActivities.value.unshift(newActivity)
+  localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
+  
   currentStep.value = 'success'
 }
 
 const returnToDashboard = () => {
   interventionData.value = null
+  selectedTemplate.value = ''
+  rawTranscript.value = ''
   currentStep.value = 'dashboard'
 }
 </script>
@@ -75,8 +228,19 @@ const returnToDashboard = () => {
   <main class="app-background">
     <div class="bg-overlay"></div>
 
+    <CriticalAlertModal 
+      v-if="showCriticalAlert" 
+      :keywords="detectedKeywords" 
+      @on-dismiss="handleAlertDismiss" 
+      @on-escalate="handleAlertEscalate" 
+    />
+
     <div class="glass-card">
-      <header class="app-header" v-if="currentStep !== 'login'">
+      <header class="app-header" v-if="currentStep !== 'login' && currentStep !== 'mfa'">
+        <div :class="['network-badge', isOnline ? 'online-badge' : 'offline-badge']">
+          <span class="dot"></span> {{ isOnline ? 'Conectado a la Red' : 'Sin Internet (Modo Seguro Local)' }}
+        </div>
+
         <div class="header-top">
           <div class="logo-mini">🌱</div>
           
@@ -89,7 +253,7 @@ const returnToDashboard = () => {
             </button>
 
             <button 
-              v-else-if="currentStep === 'capture' || currentStep === 'review' || currentStep === 'success'" 
+              v-else-if="currentStep === 'type-select' || currentStep === 'capture' || currentStep === 'privacy' || currentStep === 'review' || currentStep === 'success'" 
               class="btn-back" 
               @click="returnToDashboard">
               Volver al Panel
@@ -107,6 +271,12 @@ const returnToDashboard = () => {
       <LoginView 
         v-if="currentStep === 'login'" 
         @on-login-success="handleLoginSuccess" 
+      />
+
+      <SecurityMfa 
+        v-else-if="currentStep === 'mfa'"
+        @on-verified="handleMfaVerified"
+        @on-cancel="currentStep = 'login'"
       />
 
       <div v-else-if="currentStep === 'role-select'" class="role-selector">
@@ -133,7 +303,6 @@ const returnToDashboard = () => {
         :user="currentUser"
       />
 
-      <!-- AQUÍ PASAMOS EL HISTORIAL (activities) AL DASHBOARD -->
       <DashboardView 
         v-else-if="currentStep === 'dashboard'"
         :user="currentUser"
@@ -141,9 +310,22 @@ const returnToDashboard = () => {
         @on-new-intervention="startNewIntervention"
       />
 
+      <InterventionTypeSelector 
+        v-else-if="currentStep === 'type-select'"
+        @on-select-type="handleTypeSelected"
+        @on-cancel="currentStep = 'dashboard'"
+      />
+
       <AudioCapture 
         v-else-if="currentStep === 'capture'" 
-        @on-processed="handleDataStructured" 
+        @on-processed="handleRawProcessed" 
+      />
+
+      <PrivacyAnonymizer 
+        v-else-if="currentStep === 'privacy'"
+        :raw-transcript="rawTranscript"
+        @on-sanitized="handlePrivacySanitized"
+        @on-cancel="currentStep = 'capture'"
       />
 
       <InterventionReview 
@@ -154,8 +336,12 @@ const returnToDashboard = () => {
 
       <div v-else-if="currentStep === 'success'" class="success-screen">
         <div class="icon-success">✨</div>
-        <h3>¡Registro Guardado!</h3>
-        <p>La intervención ha sido documentada de forma segura en el historial del centro.</p>
+        <h3>{{ isOnline ? '¡Registro Guardado!' : '¡Borrador Guardado Localmente!' }}</h3>
+        <p v-if="isOnline">La intervención ha sido documentada de forma segura en la base de datos de la nube.</p>
+        <p v-else>No tienes internet. El registro se resguardó en tu teléfono y se subirá solo cuando recuperes señal.</p>
+        
+        <PdfGenerator v-if="interventionData" :intervention-data="interventionData" />
+
         <button class="btn-primary" @click="returnToDashboard">Hacer otro registro</button>
       </div>
     </div>
@@ -163,7 +349,6 @@ const returnToDashboard = () => {
 </template>
 
 <style scoped>
-/* (Se mantienen los estilos del fondo y el glassmorphism) */
 .app-background {
   min-height: 100vh;
   display: flex;
@@ -217,6 +402,52 @@ const returnToDashboard = () => {
   text-align: center;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   box-sizing: border-box;
+}
+
+/* ESTILOS DEL NUEVO INDICADOR DE RED */
+.network-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 15px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.online-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.online-badge .dot {
+  width: 6px;
+  height: 6px;
+  background-color: #10b981;
+  border-radius: 50%;
+}
+
+.offline-badge {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  animation: blink 2s infinite ease-in-out;
+}
+
+.offline-badge .dot {
+  width: 6px;
+  height: 6px;
+  background-color: #f59e0b;
+  border-radius: 50%;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .header-top {
@@ -286,7 +517,6 @@ const returnToDashboard = () => {
   color: #6ee7b7;
 }
 
-/* --- ESTILOS DEL NUEVO MENÚ DE ROLES --- */
 .role-selector {
   text-align: center;
   animation: fadeIn 0.4s ease;
@@ -346,9 +576,11 @@ const returnToDashboard = () => {
   line-height: 1.4;
 }
 
-/* Éxito y botones generales */
 .success-screen {
   animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .icon-success {

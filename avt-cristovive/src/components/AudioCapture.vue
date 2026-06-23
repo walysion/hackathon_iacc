@@ -100,29 +100,17 @@ const processIntervention = async () => {
   // Simulamos una espera de red de 2 segundos para dar sensación de procesamiento LLM
   await new Promise(resolve => setTimeout(resolve, 2000))
 
-  // Simulamos que la IA nos devuelve un objeto JSON estructurado
-const simulatedStructuredData = {
-    id: Date.now(),
-    timestamp: new Date().toLocaleString('es-CL'),
-    textoOriginal: transcript.value,
-    objetivo: "Extraído por IA (Simulación)",
-    // AQUÍ INYECTAMOS TU VOZ REAL:
-    desarrollo: transcript.value || "No se detectó audio en la grabación.",
-    acuerdos: "Pendiente de definición con el usuario.",
-    acciones: "Revisar evolución en próxima sesión.",
-    observaciones: "Registro capturado en terreno mediante voz."
-  }
-
   isProcessing.value = false
   
-  // Emitimos el evento hacia App.vue para pasar a la pantalla final de revisión
-  emit('onProcessed', simulatedStructuredData)
+  // RESOLUCIÓN DEL ATASCO CLAVE: Emitimos el texto crudo (String) en lugar del objeto antiguo
+  // Esto permite que pase limpiamente por el Anonimizador PII y el detector de Alertas Críticas
+  const cleanText = transcript.value.trim()
+  emit('onProcessed', cleanText)
 }
 </script>
 
 <template>
   <div class="capture-container">
-    <!-- ESTADO 1: Inactivo -->
     <div v-if="!isListening && !isProcessing" class="idle-state">
       <p class="instructions">
         Presiona el botón y comienza a relatar la intervención ocurrida. La Inteligencia Artificial la transcribirá automáticamente en tiempo real.
@@ -132,7 +120,6 @@ const simulatedStructuredData = {
       </button>
     </div>
 
-    <!-- ESTADO 2: Escuchando -->
     <div v-else-if="isListening" class="listening-state">
       <div class="pulse-ring"></div>
       <div class="transcription-box">
@@ -143,14 +130,12 @@ const simulatedStructuredData = {
       </button>
     </div>
 
-    <!-- ESTADO 3: Procesando (IA) -->
     <div v-else-if="isProcessing" class="processing-state glass-panel">
       <div class="loader"></div>
       <h3>Generando Análisis Clínico...</h3>
       <p>Nuestra IA está estructurando la información capturada en formato médico estandarizado.</p>
     </div>
 
-    <!-- Mensajes de Error -->
     <p v-if="errorMessage" class="error-message">⚠️ {{ errorMessage }}</p>
   </div>
 </template>

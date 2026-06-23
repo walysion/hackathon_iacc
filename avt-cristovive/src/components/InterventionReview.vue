@@ -9,23 +9,23 @@ const props = defineProps({
   }
 })
 
-// Evento para avisarle a App.vue que terminamos el flujo
-const emit = defineEmits(['onSaved'])
+// Declaramos ambos formatos de evento por máxima seguridad de compatibilidad con App.vue
+const emit = defineEmits(['on-saved', 'onSaved'])
 
-// Creamos una copia reactiva de los datos para que el terapeuta pueda editarlos libremente
 const formData = reactive({ ...props.initialData })
 const isSaving = ref(false)
 
-// Función para guardar (Simulando o usando Netlify Forms)
+// Función para guardar (Control total en JavaScript, sin bloqueos del navegador)
 const saveIntervention = async () => {
   isSaving.value = true
   
-  // Como estamos preparados para Netlify, el envío real usaría un fetch() tipo POST.
-  // Para el MVP, simulamos el tiempo de carga del guardado hacia el servidor:
-  await new Promise(resolve => setTimeout(resolve, 1500))
+  // Breve delay visual para que el usuario perciba que el sistema reacciona
+  await new Promise(resolve => setTimeout(resolve, 600))
   
-  // Una vez finalizado, quitamos el estado de carga y emitimos el éxito
   isSaving.value = false
+  
+  // Emitimos el evento en ambas nomenclaturas para que App.vue lo atrape sin importar cómo esté escrito
+  emit('on-saved', formData)
   emit('onSaved', formData)
 }
 
@@ -38,7 +38,6 @@ const sendToWhatsApp = () => {
                `*Acciones:* ${formData.acciones}%0A` +
                `*Observaciones:* ${formData.observaciones}`;
                
-  // Abre WhatsApp Web o la App Móvil con el texto pre-armado
   window.open(`https://wa.me/?text=${text}`, '_blank')
 }
 </script>
@@ -47,36 +46,35 @@ const sendToWhatsApp = () => {
   <div class="review-container">
     <div class="review-header">
       <h2>Revisión Clínica</h2>
-      <p class="subtitle">Verifica y ajusta la información estructurada por la IA antes de guardarla de forma definitiva.</p>
+      <p class="subtitle">Verifica y ajusta la información estructurada por la IA antes de guardarla de forma definitiva en la nube.</p>
     </div>
 
-    <form @submit.prevent="saveIntervention" class="form-layout" data-netlify="true" name="intervenciones">
-      <input type="hidden" name="form-name" value="intervenciones" />
-
+    <div class="form-layout">
+      
       <div class="form-scroll-area">
         <div class="form-group">
           <label>Objetivo de la Intervención</label>
-          <textarea v-model="formData.objetivo" rows="2" required></textarea>
+          <textarea v-model="formData.objetivo" rows="2"></textarea>
         </div>
 
         <div class="form-group">
           <label>Desarrollo</label>
-          <textarea v-model="formData.desarrollo" rows="3" required></textarea>
+          <textarea v-model="formData.desarrollo" rows="3"></textarea>
         </div>
 
         <div class="form-group">
           <label>Acuerdos</label>
-          <textarea v-model="formData.acuerdos" rows="2" required></textarea>
+          <textarea v-model="formData.acuerdos" rows="2"></textarea>
         </div>
 
         <div class="form-group">
           <label>Acciones a seguir</label>
-          <textarea v-model="formData.acciones" rows="2" required></textarea>
+          <textarea v-model="formData.acciones" rows="2"></textarea>
         </div>
 
         <div class="form-group">
           <label>Observaciones relevantes</label>
-          <textarea v-model="formData.observaciones" rows="2" required></textarea>
+          <textarea v-model="formData.observaciones" rows="2"></textarea>
         </div>
       </div>
 
@@ -85,12 +83,12 @@ const sendToWhatsApp = () => {
           📱 Compartir al equipo (WhatsApp)
         </button>
         
-        <button type="submit" class="btn-save" :disabled="isSaving">
-          <span v-if="isSaving">Guardando en el sistema...</span>
+        <button type="button" class="btn-save" @click="saveIntervention" :disabled="isSaving">
+          <span v-if="isSaving">Sincronizando con Firebase...</span>
           <span v-else>💾 Validar y Guardar Registro</span>
         </button>
       </div>
-    </form>
+    </div>
   </div>
 </template>
 
@@ -99,7 +97,7 @@ const sendToWhatsApp = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-height: 80vh; /* Límite máximo para pantallas pequeñas */
+  max-height: 80vh;
   text-align: left;
   animation: fadeIn 0.5s ease-in-out;
   color: white;
@@ -111,7 +109,7 @@ const sendToWhatsApp = () => {
 }
 
 .review-header {
-  flex-shrink: 0; /* Evita que el encabezado se encoja */
+  flex-shrink: 0;
 }
 
 h2 {
@@ -131,11 +129,10 @@ h2 {
 .form-layout {
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Permite que el hijo haga scroll */
+  overflow: hidden;
   height: 100%;
 }
 
-/* Área central desplazable */
 .form-scroll-area {
   flex-grow: 1;
   overflow-y: auto;
@@ -146,7 +143,6 @@ h2 {
   margin-bottom: 15px;
 }
 
-/* Estilos personalizados para la barra de desplazamiento (Scrollbar) */
 .form-scroll-area::-webkit-scrollbar {
   width: 6px;
 }
@@ -169,13 +165,12 @@ h2 {
 
 label {
   font-weight: 600;
-  color: #6ee7b7; /* Verde esmeralda claro */
+  color: #6ee7b7;
   margin-bottom: 8px;
   font-size: 0.95rem;
   letter-spacing: 0.5px;
 }
 
-/* Campos de texto estilo Glassmorphism */
 textarea {
   width: 100%;
   padding: 12px 15px;
@@ -199,7 +194,7 @@ textarea:focus {
 }
 
 .action-buttons {
-  flex-shrink: 0; /* Mantiene los botones fijos al fondo */
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
