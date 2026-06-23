@@ -11,6 +11,12 @@ const currentStep = ref('login') // 'login' | 'role-select' | 'admin-dashboard' 
 const interventionData = ref(null)
 const currentUser = ref(null)
 
+// --- ESTADO GLOBAL: Historial de actividades dinámico ---
+// Esto permite que lo que grabes se vea reflejado en el Dashboard
+const globalActivities = ref([
+  { id: 1, type: 'Visita Domiciliaria', time: 'Hoy, 10:30 AM', status: 'Sincronizado' }
+])
+
 // --- Lógica de Roles ---
 const isAdmin = computed(() => {
   if (!currentUser.value || !currentUser.value.email) return false
@@ -47,7 +53,15 @@ const handleDataStructured = (data) => {
   currentStep.value = 'review'
 }
 
-const handleSaveSuccess = () => {
+// AQUÍ RECIBIMOS LOS DATOS Y LOS GUARDAMOS EN EL HISTORIAL
+const handleSaveSuccess = (savedData) => {
+  // Añadimos la nueva intervención al inicio de la lista
+  globalActivities.value.unshift({
+    id: Date.now(),
+    type: 'Intervención Asistida (IA)',
+    time: 'Justo ahora',
+    status: 'Sincronizado'
+  })
   currentStep.value = 'success'
 }
 
@@ -119,9 +133,11 @@ const returnToDashboard = () => {
         :user="currentUser"
       />
 
+      <!-- AQUÍ PASAMOS EL HISTORIAL (activities) AL DASHBOARD -->
       <DashboardView 
         v-else-if="currentStep === 'dashboard'"
         :user="currentUser"
+        :activities="globalActivities"
         @on-new-intervention="startNewIntervention"
       />
 

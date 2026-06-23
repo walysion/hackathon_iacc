@@ -101,16 +101,16 @@ const processIntervention = async () => {
   await new Promise(resolve => setTimeout(resolve, 2000))
 
   // Simulamos que la IA nos devuelve un objeto JSON estructurado
-  const simulatedStructuredData = {
+const simulatedStructuredData = {
     id: Date.now(),
     timestamp: new Date().toLocaleString('es-CL'),
     textoOriginal: transcript.value,
-    // Simulamos el trabajo de la IA extrayendo categorías clínicas del texto
-    objetivo: "Intervención de contención emocional solicitada por usuario en crisis leve.",
-    desarrollo: "Se aplicaron técnicas de respiración guiada. " + transcript.value.substring(0, 50) + "...", // Añadimos un fragmento real para mayor realismo en la demo
-    acuerdos: "Compromiso de asistir a taller de manejo de ira la próxima semana.",
-    acciones: "Derivación a psicólogo de turno para seguimiento PM.",
-    observaciones: "Usuario se retira más calmado pero requiere monitoreo de signos vitales."
+    objetivo: "Extraído por IA (Simulación)",
+    // AQUÍ INYECTAMOS TU VOZ REAL:
+    desarrollo: transcript.value || "No se detectó audio en la grabación.",
+    acuerdos: "Pendiente de definición con el usuario.",
+    acciones: "Revisar evolución en próxima sesión.",
+    observaciones: "Registro capturado en terreno mediante voz."
   }
 
   isProcessing.value = false

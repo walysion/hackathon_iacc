@@ -1,10 +1,14 @@
 <script setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
 
-// Recibimos los datos del usuario logueado
-defineProps({
+// Recibimos los datos del usuario logueado y la lista global de actividades desde App.vue
+const props = defineProps({
   user: {
     type: Object,
+    required: true
+  },
+  activities: {
+    type: Array,
     required: true
   }
 })
@@ -17,22 +21,20 @@ const startIntervention = () => {
   emit('onNewIntervention')
 }
 
-// --- ESTADO: Datos Simulados del Terapeuta ---
-const stats = ref({
-  sessionsToday: 3,
-  pendingSync: 1,
-  weeklyTotal: 14
+// --- ESTADO: Estadísticas Dinámicas basadas en la lista global ---
+// Se calculan automáticamente según el tamaño del arreglo 'activities'
+const stats = computed(() => {
+  return {
+    sessionsToday: props.activities.length,
+    pendingSync: props.activities.filter(a => a.status === 'Pendiente IA').length,
+    weeklyTotal: props.activities.length + 13 // +13 es un dato simulado base para la semana
+  }
 })
-
-const recentActivity = ref([
-  { id: 1, type: 'Visita Domiciliaria', time: 'Hoy, 10:30 AM', status: 'Sincronizado' },
-  { id: 2, type: 'Evaluación Inicial', time: 'Hoy, 12:15 PM', status: 'Pendiente IA' },
-  { id: 3, type: 'Seguimiento', time: 'Ayer, 16:00 PM', status: 'Sincronizado' }
-])
 </script>
 
 <template>
-  <div class="therapist-dashboard">
+  <!-- Agregamos la clase scrollable-container para manejar el historial largo en pantallas pequeñas -->
+  <div class="therapist-dashboard scrollable-container">
     <div class="dashboard-header">
       <h2>Panel de Trabajo</h2>
       <p class="welcome-text">Hola, <strong>{{ user?.name || 'Terapeuta' }}</strong></p>
@@ -64,7 +66,8 @@ const recentActivity = ref([
     <div class="activity-section glass-panel">
       <h3>Actividad Reciente</h3>
       <ul class="activity-list">
-        <li v-for="activity in recentActivity" :key="activity.id" class="activity-item">
+        <!-- Iteramos sobre la lista dinámica (activities) en lugar de la estática -->
+        <li v-for="activity in activities" :key="activity.id" class="activity-item">
           <div class="activity-info">
             <span class="activity-type">{{ activity.type }}</span>
             <span class="activity-time">{{ activity.time }}</span>
@@ -79,6 +82,22 @@ const recentActivity = ref([
 </template>
 
 <style scoped>
+/* Control del scroll para no desbordar App.vue */
+.scrollable-container {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.scrollable-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
 .therapist-dashboard {
   display: flex;
   flex-direction: column;

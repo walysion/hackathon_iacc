@@ -26,7 +26,7 @@ const saveIntervention = async () => {
   
   // Una vez finalizado, quitamos el estado de carga y emitimos el éxito
   isSaving.value = false
-  emit('onSaved')
+  emit('onSaved', formData)
 }
 
 // BONUS DE INNOVACIÓN: Generar reporte instantáneo por WhatsApp
