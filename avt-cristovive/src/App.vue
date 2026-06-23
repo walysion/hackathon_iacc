@@ -19,7 +19,6 @@ import PdfGenerator from './components/PdfGenerator.vue'
 import { saveInterventionToCloud, getInterventionsFromCloud } from './services/database.js'
 
 // --- CONTROL DE NAVEGACIÓN EXTENDIDO ---
-// Pasos: 'login' | 'mfa' | 'role-select' | 'admin-dashboard' | 'dashboard' | 'type-select' | 'capture' | 'privacy' | 'review' | 'success'
 const currentStep = ref('login') 
 const interventionData = ref(null)
 const currentUser = ref(null)
@@ -55,12 +54,13 @@ onMounted(async () => {
     globalActivities.value = JSON.parse(savedActivities)
   }
   
-  // 2. Si hay internet, traemos los datos reales de Firebase
+  // 2. Si hay internet, traemos los datos reales de Firebase (CON TIMEOUT DE SEGURIDAD)
   if (isOnline.value) {
     try {
-      const dbRes = await getInterventionsFromCloud()
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 3000))
+      const dbRes = await Promise.race([getInterventionsFromCloud(), timeout])
+      
       if (dbRes.success && dbRes.data.length > 0) {
-        // Formateamos los datos de la nube para el dashboard
         const formattedData = dbRes.data.map(doc => ({
           id: doc.id,
           type: doc.objetivo || 'Intervención Asistida',
@@ -71,7 +71,7 @@ onMounted(async () => {
         localStorage.setItem('talitakum_activities', JSON.stringify(formattedData))
       }
     } catch (e) {
-      console.log("Aviso: Ejecutando en modo puramente local (Firebase no configurado aún).")
+      console.log("Aviso: Ejecutando en modo puramente local. Firebase no respondió a tiempo.")
     }
     syncOfflineDrafts()
   }
@@ -88,7 +88,7 @@ const isAdmin = computed(() => {
   return currentUser.value.email.toLowerCase().includes('admin')
 })
 
-// --- MOTOR DE SINCRONIZACIÓN OFFLINE ---
+// --- MOTOR DE SINCRONIZACIÓN OFFLINE (CON TIMEOUT DE SEGURIDAD) ---
 const syncOfflineDrafts = async () => {
   const pendingDrafts = globalActivities.value.filter(act => act.status === 'Pendiente de Red')
   if (pendingDrafts.length === 0) return
@@ -97,13 +97,16 @@ const syncOfflineDrafts = async () => {
 
   for (let act of pendingDrafts) {
     try {
-      // Intentamos subir a la nube
-      await saveInterventionToCloud(act.rawData, currentUser.value?.email || 'offline_user')
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 3000))
+      await Promise.race([
+        saveInterventionToCloud(act.rawData, currentUser.value?.email || 'offline_user'),
+        timeout
+      ])
       act.status = 'Sincronizado'
       act.time = 'Sincronizado automáticamente'
-      delete act.rawData // Limpiamos el payload pesado
+      delete act.rawData 
     } catch (e) {
-      console.error("Fallo al sincronizar borrador", e)
+      console.log("Fallo al sincronizar borrador, se reintentará luego.")
     }
   }
 
@@ -114,7 +117,7 @@ const syncOfflineDrafts = async () => {
 
 const handleLoginSuccess = (user) => {
   currentUser.value = user
-  currentStep.value = 'mfa' // Ahora pasamos al 2FA obligatorio
+  currentStep.value = 'mfa' 
 }
 
 const handleMfaVerified = () => {
@@ -135,12 +138,12 @@ const goToRoleSelect = () => {
 }
 
 const startNewIntervention = () => {
-  currentStep.value = 'type-select' // Vamos al selector de plantillas primero
+  currentStep.value = 'type-select' 
 }
 
 const handleTypeSelected = (typeId) => {
   selectedTemplate.value = typeId
-  currentStep.value = 'capture' // Luego a grabar
+  currentStep.value = 'capture' 
 }
 
 // Cuando el micrófono devuelve el texto crudo
@@ -154,9 +157,9 @@ const handleRawProcessed = (text) => {
 
   if (foundKeywords.length > 0) {
     detectedKeywords.value = foundKeywords
-    showCriticalAlert.value = true // Levantamos el modal
+    showCriticalAlert.value = true 
   } else {
-    currentStep.value = 'privacy' // Directo al filtro PII
+    currentStep.value = 'privacy' 
   }
 }
 
@@ -168,12 +171,11 @@ const handleAlertDismiss = () => {
 
 const handleAlertEscalate = () => {
   showCriticalAlert.value = false
-  currentStep.value = 'privacy' // Continúa el flujo tras notificar
+  currentStep.value = 'privacy' 
 }
 
 // Cuando el anonimizador devuelve el texto limpio
 const handlePrivacySanitized = (safeText) => {
-  // Simulamos la respuesta estructurada de la IA usando la plantilla elegida
   interventionData.value = {
     objetivo: `Abordaje clínico (${selectedTemplate.value.toUpperCase()})`,
     desarrollo: safeText,
@@ -184,35 +186,46 @@ const handlePrivacySanitized = (safeText) => {
   currentStep.value = 'review'
 }
 
-// Guardado Final en Nube o Local
+// --- GUARDADO FINAL: EL NÚCLEO DEL ARREGLO ---
 const handleSaveSuccess = async (savedData) => {
   if (savedData) interventionData.value = savedData
 
-  const currentStatus = isOnline.value ? 'Sincronizado' : 'Pendiente de Red'
-  const currentTime = isOnline.value ? 'Justo ahora' : 'Guardado en modo local'
+  let currentStatus = isOnline.value ? 'Sincronizado' : 'Pendiente de Red'
+  let currentTime = isOnline.value ? 'Justo ahora' : 'Guardado en modo local'
 
   const newActivity = {
     id: Date.now(),
     type: interventionData.value.objetivo,
     time: currentTime,
     status: currentStatus,
-    rawData: currentStatus === 'Pendiente de Red' ? interventionData.value : null
+    rawData: null 
   }
 
-  // Si hay internet, guardamos en la base de datos real
+  // Intentamos guardar en Firebase, PERO le damos máximo 3 segundos.
   if (isOnline.value) {
     try {
-      await saveInterventionToCloud(interventionData.value, currentUser.value?.email)
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Bloqueado')), 3000))
+      
+      // La carrera: Quien termine primero gana. Si Firebase demora más de 3s, salta al catch.
+      await Promise.race([
+        saveInterventionToCloud(interventionData.value, currentUser.value?.email),
+        timeout
+      ])
     } catch (e) {
-      console.log("Guardado en nube falló, usando local.")
+      console.warn("La nube no respondió a tiempo. Activando protocolo de guardado local.")
       newActivity.status = 'Pendiente de Red'
+      newActivity.time = 'Guardado en modo local'
       newActivity.rawData = interventionData.value
     }
+  } else {
+    newActivity.rawData = interventionData.value
   }
 
+  // Aseguramos que la actividad aparezca en el historial
   globalActivities.value.unshift(newActivity)
   localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
   
+  // ¡Fuerza el avance a la pantalla de éxito sin importar qué pase con Firebase!
   currentStep.value = 'success'
 }
 
@@ -226,7 +239,18 @@ const returnToDashboard = () => {
 
 <template>
   <main class="app-background">
-    <div class="bg-overlay"></div>
+    <video 
+      v-if="currentStep === 'login'" 
+      class="bg-video animation-fade" 
+      autoplay 
+      loop 
+      muted 
+      playsinline
+    >
+      <source src="/bg-video.mp4" type="video/mp4" />
+    </video>
+
+    <div :class="['bg-overlay', currentStep === 'login' ? 'overlay-darker' : '']"></div>
 
     <CriticalAlertModal 
       v-if="showCriticalAlert" 
@@ -338,13 +362,22 @@ const returnToDashboard = () => {
         <div class="icon-success">✨</div>
         <h3>{{ isOnline ? '¡Registro Guardado!' : '¡Borrador Guardado Localmente!' }}</h3>
         <p v-if="isOnline">La intervención ha sido documentada de forma segura en la base de datos de la nube.</p>
-        <p v-else>No tienes internet. El registro se resguardó en tu teléfono y se subirá solo cuando recuperes señal.</p>
+        <p v-else>El sistema remoto demoró en responder. El registro se resguardó en tu teléfono y se subirá solo cuando recuperes señal.</p>
         
         <PdfGenerator v-if="interventionData" :intervention-data="interventionData" />
 
         <button class="btn-primary" @click="returnToDashboard">Hacer otro registro</button>
       </div>
     </div>
+
+    <footer class="app-footer">
+      <div class="logos-container">
+        <img src="/logo-iacc.webp" alt="Logo IACC" class="footer-logo" />
+        <img src="/logo-fundacion.png" alt="Logo Fundación Cristo Vive" class="footer-logo" />
+      </div>
+      <p class="team-name">Desarrollado con ❤️ por el equipo: <strong>[Tu Grupo Aquí]</strong></p>
+    </footer>
+
   </main>
 </template>
 
@@ -369,11 +402,22 @@ const returnToDashboard = () => {
   height: 200%;
   background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
   animation: rotateLight 20s linear infinite;
+  z-index: 0;
 }
 
-@keyframes rotateLight {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+/* ESTILOS DEL VIDEO DE FONDO */
+.bg-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+  filter: blur(6px) brightness(0.65);
+  transform: scale(1.05); 
+  pointer-events: none; 
 }
 
 .bg-overlay {
@@ -384,6 +428,11 @@ const returnToDashboard = () => {
   height: 100%;
   background: rgba(0, 0, 0, 0.2);
   z-index: 1;
+  transition: background 0.5s ease;
+}
+
+.overlay-darker {
+  background: rgba(19, 78, 94, 0.4);
 }
 
 .glass-card {
@@ -402,9 +451,68 @@ const returnToDashboard = () => {
   text-align: center;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   box-sizing: border-box;
+  margin-bottom: 80px; /* <-- AGREGA ESTO: Empuja la tarjeta hacia arriba para dar espacio a los logos */
 }
 
-/* ESTILOS DEL NUEVO INDICADOR DE RED */
+/* --- ESTILOS DEL FOOTER MEJORADO CON DEGRADADO --- */
+.app-footer {
+  position: absolute;
+  bottom: -50px; 
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+  gap: 15px; 
+  
+  /* REGLA 1: Aumenta el padding-top. Mientras más alto sea este número, más arriba empezará el degradado. */
+  padding-top: 30px; 
+  padding-bottom: 0px; 
+
+  /* REGLA 2: Controla los porcentajes del degradado. */
+  /* Si cambias el '65%' por '85%', empujas el color oscuro mucho más arriba antes de que empiece a desvanecerse a transparente. */
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.7) 85%, transparent 100%);
+  
+  pointer-events: none; 
+}
+
+.logos-container {
+  pointer-events: auto; /* Reactivamos clics para esta zona */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 25px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px 25px;
+  border-radius: 50px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.footer-logo {
+  height: 40px; 
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  transition: transform 0.3s ease;
+}
+
+.footer-logo:hover {
+  transform: scale(1.05);
+}
+
+.team-name {
+  pointer-events: auto;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.85rem;
+  margin: 0;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8); /* Sombra de texto fuerte para máxima legibilidad */
+}
+/* -------------------------------- */
+
 .network-badge {
   display: inline-flex;
   align-items: center;
@@ -606,6 +714,10 @@ const returnToDashboard = () => {
 .btn-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.6);
+}
+
+.animation-fade {
+  animation: fadeIn 0.8s ease;
 }
 
 @keyframes fadeIn {
