@@ -9,8 +9,8 @@ const props = defineProps({
   }
 })
 
-// Declaramos ambos formatos de evento por máxima seguridad de compatibilidad con App.vue
-const emit = defineEmits(['on-saved', 'onSaved'])
+// Declaramos UN SOLO EVENTO para evitar el "Efecto Fantasma" de duplicidad en la interfaz
+const emit = defineEmits(['onSaved'])
 
 const formData = reactive({ ...props.initialData })
 const isSaving = ref(false)
@@ -23,9 +23,8 @@ const saveIntervention = () => {
   // Bloqueamos el botón y activamos el spinner de forma permanente
   isSaving.value = true
   
-  // Emitimos el evento al Orquestador (App.vue). 
+  // Emitimos UN SOLO EVENTO al Orquestador (App.vue). 
   // No devolvemos isSaving a false porque App.vue se encargará de destruir esta pantalla al terminar.
-  emit('on-saved', formData)
   emit('onSaved', formData)
 }
 
