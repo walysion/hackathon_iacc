@@ -5,12 +5,14 @@ import { auth } from '../firebase'
 
 const emit = defineEmits(['onLoginSuccess'])
 
+// Estados del Formulario
 const email = ref('')
 const password = ref('')
 const twoFactorCode = ref('')
 const loginStep = ref('credentials') // 'credentials' | '2fa'
 const isLoading = ref(false)
 const errorMessage = ref('')
+const showPassword = ref(false) // <-- NUEVO: Controla la visibilidad de la contraseña
 
 // Almacenamos temporalmente el usuario real de Firebase entre pasos
 const pendingFirebaseUser = ref(null)
@@ -53,7 +55,7 @@ const handle2FA = async () => {
   isLoading.value = true
   errorMessage.value = ''
   
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise(resolve => setTimeout(resolve, 1500)) // Un poco más de tiempo para apreciar el spinner premium
   
   if (twoFactorCode.value.length === 6) {
     // REGLA DE NEGOCIO: Si el correo contiene "admin", es Jefatura Global (Super Admin)
@@ -83,96 +85,109 @@ const cancel2FA = () => {
 </script>
 
 <template>
-  <div class="login-container">
-    <div class="glass-card login-card">
-      <div class="header-login">
-        <div class="lock-icon">🔒</div>
-        <h2>Acceso Clínico</h2>
-        <p class="subtitle">Plataforma Segura - Talita Kum</p>
+  <div class="login-content-wrapper animation-fade">
+    
+    <!-- Encabezado unificado -->
+    <div class="header-login">
+      <div class="lock-icon-wrapper">
+        <span class="lock-icon">{{ loginStep === 'credentials' ? '🔒' : '🛡️' }}</span>
       </div>
+      <h2>{{ loginStep === 'credentials' ? 'Acceso Clínico' : 'Verificación de Seguridad' }}</h2>
+      <p class="subtitle">Plataforma Segura - Talita Kum</p>
+    </div>
 
-      <!-- PASO 1: Credenciales -->
-      <form v-if="loginStep === 'credentials'" @submit.prevent="handleLogin" class="form-layout">
-        <div class="form-group">
-          <label for="emailInput">Correo Institucional</label>
+    <!-- PASO 1: Credenciales -->
+    <form v-if="loginStep === 'credentials'" @submit.prevent="handleLogin" class="form-layout">
+      
+      <div class="form-group">
+        <label for="emailInput">Correo Institucional</label>
+        <div class="input-relative-container">
           <input 
             id="emailInput"
             type="email" 
             v-model="email" 
             placeholder="ejemplo@fundacion.cl" 
             required 
+            :disabled="isLoading"
           />
+          <span class="input-icon-hint">📧</span>
         </div>
+      </div>
 
-        <div class="form-group">
-          <label for="passwordInput">Contraseña</label>
+      <div class="form-group">
+        <label for="passwordInput">Contraseña</label>
+        <div class="input-relative-container">
           <input 
             id="passwordInput"
-            type="password" 
+            :type="showPassword ? 'text' : 'password'" 
             v-model="password" 
             placeholder="••••••••" 
             required 
+            :disabled="isLoading"
           />
+          <!-- Ojo interactivo para mostrar/ocultar contraseña -->
+          <button 
+            type="button" 
+            class="btn-toggle-view"
+            @click="showPassword = !showPassword"
+            tabindex="-1"
+          >
+            {{ showPassword ? '👁️' : '🙈' }}
+          </button>
         </div>
+      </div>
 
-        <button type="submit" class="btn-primary" :disabled="isLoading">
-          <span v-if="isLoading">Verificando en servidor...</span>
-          <span v-else>Ingresar al Sistema</span>
+      <button type="submit" class="btn-primary" :disabled="isLoading || !email || !password">
+        <span v-if="isLoading" class="spinner"></span>
+        <span>{{ isLoading ? 'Verificando en servidor...' : 'Ingresar al Sistema' }}</span>
+      </button>
+    </form>
+
+    <!-- PASO 2: Doble Factor (2FA) -->
+    <form v-else-if="loginStep === '2fa'" @submit.prevent="handle2FA" class="form-layout step-2fa">
+      <p class="instruction-2fa">
+        Hemos enviado un código de 6 dígitos a tu dispositivo móvil registrado para evitar accesos no autorizados.
+      </p>
+      
+      <div class="form-group text-center">
+        <input 
+          type="text" 
+          v-model="twoFactorCode" 
+          @input="filterNumeric"
+          inputmode="numeric"
+          pattern="[0-9]{6}"
+          maxlength="6" 
+          placeholder="000000" 
+          class="input-2fa" 
+          required 
+          :disabled="isLoading"
+        />
+      </div>
+
+      <div class="button-group">
+        <button type="button" class="btn-secondary" @click="cancel2FA" :disabled="isLoading">
+          Volver
         </button>
-      </form>
+        <button type="submit" class="btn-primary" :disabled="isLoading || twoFactorCode.length !== 6">
+          <span v-if="isLoading" class="spinner"></span>
+          <span>{{ isLoading ? 'Validando...' : 'Verificar Identidad' }}</span>
+        </button>
+      </div>
+    </form>
 
-      <!-- PASO 2: Doble Factor (2FA) -->
-      <form v-else-if="loginStep === '2fa'" @submit.prevent="handle2FA" class="form-layout step-2fa">
-        <div class="shield-icon">🛡️</div>
-        <h3>Autenticación de 2 Pasos</h3>
-        <p class="instruction-2fa">Hemos enviado un código de 6 dígitos a tu dispositivo móvil registrado para evitar accesos no autorizados.</p>
-        
-        <div class="form-group">
-          <input 
-            type="text" 
-            v-model="twoFactorCode" 
-            @input="filterNumeric"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            maxlength="6" 
-            placeholder="000000" 
-            class="input-2fa" 
-            required 
-          />
-        </div>
+    <!-- Notificaciones de Error Dinámicas -->
+    <p v-if="errorMessage" class="error-message animation-slide">
+      ⚠️ {{ errorMessage }}
+    </p>
 
-        <div class="button-group">
-          <button type="button" class="btn-secondary" @click="cancel2FA" :disabled="isLoading">
-            Volver
-          </button>
-          <button type="submit" class="btn-primary" :disabled="isLoading">
-            <span v-if="isLoading">Validando Token...</span>
-            <span v-else>Verificar Identidad</span>
-          </button>
-        </div>
-      </form>
-
-      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-    </div>
   </div>
 </template>
 
 <style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.login-content-wrapper {
   width: 100%;
-}
-
-.login-card {
-  max-width: 400px;
-  animation: slideUp 0.5s ease-out;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  display: flex;
+  flex-direction: column;
 }
 
 .header-login {
@@ -180,125 +195,241 @@ const cancel2FA = () => {
   margin-bottom: 25px;
 }
 
-.lock-icon {
-  font-size: 3rem;
-  margin-bottom: 10px;
+.lock-icon-wrapper {
+  font-size: 2.8rem;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  animation: pulseIcon 2s infinite ease-in-out;
+}
+
+@keyframes pulseIcon {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
 }
 
 .header-login h2 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.7rem;
+  font-weight: 700;
   color: white;
 }
 
 .subtitle {
   color: #6ee7b7;
-  margin-top: 5px;
+  margin: 4px 0 0 0;
   font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .form-layout {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   text-align: left;
 }
 
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .form-group label {
-  display: block;
   color: #6ee7b7;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-  font-weight: bold;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.input-relative-container {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 input {
   width: 100%;
-  padding: 12px 15px;
-  background: rgba(0, 0, 0, 0.25);
+  padding: 14px 40px 14px 14px; /* Espacio extra a la derecha para los iconos internos */
+  background: rgba(15, 23, 42, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   color: white;
-  font-size: 1rem;
+  font-size: 0.95rem;
   box-sizing: border-box;
-  transition: all 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 input:focus {
   outline: none;
   border-color: #6ee7b7;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.65);
+  box-shadow: 0 0 12px rgba(110, 231, 183, 0.25);
+}
+
+input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-icon-hint {
+  position: absolute;
+  right: 14px;
+  font-size: 1.05rem;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.btn-toggle-view {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.btn-toggle-view:hover {
+  opacity: 1;
 }
 
 .button-group {
   display: flex;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 5px;
 }
 
+/* Botones Premium */
 .btn-primary {
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
-  padding: 15px;
+  padding: 14px;
   border-radius: 12px;
-  font-size: 1.1rem;
-  font-weight: bold;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+  transition: all 0.25s ease;
   flex: 2;
-  transition: all 0.3s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+  background: linear-gradient(135deg, #34d399, #059669);
+}
+
+.btn-primary:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 14px;
   border-radius: 12px;
-  font-size: 1rem;
-  font-weight: bold;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
   flex: 1;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
+.btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Bloque específico 2FA */
 .step-2fa {
-  text-align: center;
-}
-
-.shield-icon {
-  font-size: 2.5rem;
+  align-items: center;
 }
 
 .instruction-2fa {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.9rem;
-  line-height: 1.4;
-  margin-bottom: 15px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin: 0 0 10px 0;
+  text-align: center;
+}
+
+.text-center {
+  align-items: center;
+  width: 100%;
 }
 
 .input-2fa {
   text-align: center;
-  font-size: 2rem;
-  letter-spacing: 5px;
+  font-size: 1.8rem;
+  letter-spacing: 6px;
   padding: 10px;
+  max-width: 240px;
+  font-weight: 700;
+  color: #6ee7b7;
 }
 
+/* Spinner CSS Puro */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Errores y Alertas */
 .error-message {
   color: #fca5a5;
-  margin-top: 20px;
-  font-size: 0.9rem;
-  background: rgba(239, 68, 68, 0.2);
-  padding: 10px;
-  border-radius: 8px;
+  margin: 18px 0 0 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Animaciones de entrada */
+.animation-fade {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animation-slide {
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 </style>
