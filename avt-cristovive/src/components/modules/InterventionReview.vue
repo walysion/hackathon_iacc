@@ -15,16 +15,16 @@ const emit = defineEmits(['on-saved', 'onSaved'])
 const formData = reactive({ ...props.initialData })
 const isSaving = ref(false)
 
-// Función para guardar (Control total en JavaScript, sin bloqueos del navegador)
-const saveIntervention = async () => {
+// Función para guardar (Con Bloqueo Absoluto Anti-Doble Clic)
+const saveIntervention = () => {
+  // Si ya se está guardando, ignoramos cualquier clic adicional por seguridad
+  if (isSaving.value) return 
+
+  // Bloqueamos el botón y activamos el spinner de forma permanente
   isSaving.value = true
   
-  // Breve delay visual para que el usuario perciba que el sistema reacciona
-  await new Promise(resolve => setTimeout(resolve, 800))
-  
-  isSaving.value = false
-  
-  // Emitimos el evento en ambas nomenclaturas para que App.vue lo atrape sin importar cómo esté escrito
+  // Emitimos el evento al Orquestador (App.vue). 
+  // No devolvemos isSaving a false porque App.vue se encargará de destruir esta pantalla al terminar.
   emit('on-saved', formData)
   emit('onSaved', formData)
 }

@@ -100,7 +100,7 @@ onUnmounted(() => { stopSpeech() })
         </div>
       </div>
       
-      <ul class="activity-list" v-if="filteredActivities.length > 0">
+      <TransitionGroup name="list-anim" tag="ul" class="activity-list" v-if="filteredActivities.length > 0">
         <li v-for="activity in filteredActivities" :key="activity.id" class="activity-item">
           <div class="activity-info">
             <span class="activity-type">{{ activity.type }}</span>
@@ -114,7 +114,8 @@ onUnmounted(() => { stopSpeech() })
             <button class="btn-details-mini" @click="openDetails(activity)" title="Ver Detalles">👁️</button>
           </div>
         </li>
-      </ul>
+      </TransitionGroup>
+      
       <div class="empty-state" v-else>
         <span class="empty-icon">📂</span>
         <p>No se encontraron registros.</p>
@@ -208,15 +209,15 @@ onUnmounted(() => { stopSpeech() })
 .empty-state small { color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; }
 
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
-.modal-content { position: relative; width: 100%; max-width: 550px; max-height: 85vh; margin: auto; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.6); animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); background: #1e293b; }
+.modal-content { position: relative; width: 100%; max-width: 550px; max-height: 85vh; margin: auto; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.6); animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); background: #1e293b; border-radius: 16px; overflow: hidden; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
 .close-btn { position: absolute; top: 15px; right: 15px; background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 1.2rem; cursor: pointer; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
 .close-btn:hover { color: white; background: rgba(255,255,255,0.1); }
-.modal-header { margin-bottom: 20px; padding-right: 30px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+.modal-header { margin-bottom: 20px; padding: 20px 30px 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .modal-header h3 { margin: 0 0 5px 0; font-size: 1.4rem; color: white; }
 .modal-time { margin: 0; font-size: 0.85rem; color: #9ca3af; }
 .privacy-tag { display: inline-block; margin-top: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #6ee7b7; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
-.modal-body { flex-grow: 1; display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+.modal-body { flex-grow: 1; display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; padding: 0 20px; }
 .detail-section { background: rgba(255, 255, 255, 0.03); padding: 18px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.06); }
 .section-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .detail-section h4 { margin: 0; color: #a7f3d0; font-size: 1rem; }
@@ -227,7 +228,12 @@ onUnmounted(() => { stopSpeech() })
 .helper-text { margin: 0 0 10px 0; color: rgba(255,255,255,0.4); font-size: 0.8rem; }
 .readable-text { margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 0.95rem; line-height: 1.6; }
 .readable-text::selection { background: rgba(16, 185, 129, 0.4); color: white; }
-.modal-footer { border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 15px; }
+.modal-footer { border-top: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 20px; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* ANIMACIONES DE LISTA */
+.list-anim-enter-active, .list-anim-leave-active { transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.list-anim-enter-from { opacity: 0; transform: translateY(-20px) scale(0.95); background: rgba(110, 231, 183, 0.3); }
+.list-anim-leave-to { opacity: 0; transform: translateX(30px); }
 </style>
