@@ -5,6 +5,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LoginView from './components/views/LoginView.vue'
 import DashboardView from './components/views/DashboardView.vue'
 import AdminDashboard from './components/views/AdminDashboard.vue'
+import UserManagementView from './components/views/UserManagementView.vue' // <-- NUEVA VISTA IMPORTADA
 
 // --- IMPORTACIÓN DE MÓDULOS DE FLUJO ---
 import SecurityMfa from './components/modules/SecurityMfa.vue'
@@ -69,6 +70,7 @@ const currentHelpInfo = computed(() => {
     'mfa': { title: 'Verificación de Seguridad', desc: 'Hemos enviado un código de 6 números a tu teléfono móvil para confirmar tu identidad.' },
     'role-select': { title: 'Selección de Módulo', desc: 'Elige el "Panel de Supervisión" para analíticas o el "Panel de Terreno" para capturas.' },
     'admin-dashboard': { title: 'Panel de Supervisión', desc: 'Área exclusiva para revisión de estadísticas, auditorías y gestión de equipo.' },
+    'user-management': { title: 'Gestión de Personal', desc: 'Área para crear cuentas a nuevos terapeutas. Genera RUT o Pasaportes válidos.' }, // <-- NUEVA AYUDA
     'dashboard': { title: 'Historial Clínico', desc: 'Presiona el botón verde "Nueva Intervención" para iniciar un registro por voz.' },
     'type-select': { title: 'Selección de Plantilla', desc: 'Elige la opción que mejor describa la atención para guiar la estructura del modelo IA.' },
     'capture': { title: 'Asistente de Voz IA', desc: 'Habla naturalmente sobre el paciente. El sistema procesará tu relato al presionar Detener.' },
@@ -161,6 +163,10 @@ const handleLogout = () => { currentUser.value = null; currentStep.value = 'logi
 const goToRoleSelect = () => { currentStep.value = 'role-select' }
 const startNewIntervention = () => { currentStep.value = 'type-select' }
 const handleTypeSelected = (typeId) => { selectedTemplate.value = typeId; currentStep.value = 'capture' }
+
+// <--- NUEVOS ENRUTADORES PARA GESTIÓN DE USUARIOS --->
+const goToUserManagement = () => { currentStep.value = 'user-management' }
+const backToAdminDashboard = () => { currentStep.value = 'admin-dashboard' }
 
 const handleRawProcessed = (text) => {
   rawTranscript.value = text
@@ -271,7 +277,7 @@ const returnToDashboard = () => {
           <div class="header-top">
             <div class="logo-mini">🌱</div>
             <div class="header-actions">
-              <button v-if="isAdmin && (currentStep === 'dashboard' || currentStep === 'admin-dashboard')" class="btn-secondary-mini" @click="goToRoleSelect">⬅ Menú</button>
+              <button v-if="isAdmin && (currentStep === 'dashboard' || currentStep === 'admin-dashboard' || currentStep === 'user-management')" class="btn-secondary-mini" @click="goToRoleSelect">⬅ Menú</button>
               <button v-else-if="currentStep === 'type-select' || currentStep === 'capture' || currentStep === 'privacy' || currentStep === 'review' || currentStep === 'success'" class="btn-back" @click="returnToDashboard">Volver al Panel</button>
               <button class="btn-logout" @click="handleLogout">Salir</button>
             </div>
@@ -283,7 +289,11 @@ const returnToDashboard = () => {
         <LoginView v-if="currentStep === 'login'" @on-login-success="handleLoginSuccess" />
         <SecurityMfa v-else-if="currentStep === 'mfa'" @on-verified="handleMfaVerified" @on-cancel="currentStep = 'login'" />
         <RoleSelector v-else-if="currentStep === 'role-select'" :user="currentUser" @on-select-module="currentStep = $event" />
-        <AdminDashboard v-else-if="currentStep === 'admin-dashboard'" :user="currentUser" />
+        
+        <AdminDashboard v-else-if="currentStep === 'admin-dashboard'" :user="currentUser" @on-manage-users="goToUserManagement" />
+        
+        <UserManagementView v-else-if="currentStep === 'user-management'" @on-back="backToAdminDashboard" />
+
         <DashboardView v-else-if="currentStep === 'dashboard'" :user="currentUser" :activities="globalActivities" @on-new-intervention="startNewIntervention" />
         <InterventionTypeSelector v-else-if="currentStep === 'type-select'" @on-select-type="handleTypeSelected" @on-cancel="currentStep = 'dashboard'" />
         <AudioCapture v-else-if="currentStep === 'capture'" @on-processed="handleRawProcessed" />
@@ -330,8 +340,6 @@ const returnToDashboard = () => {
   width: calc(100% - 40px); max-width: 480px; box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
   color: white; text-align: center; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-sizing: border-box; margin-top: auto; margin-bottom: 60px; 
 }
-
-/* MAGIA DE RESPONSIVIDAD MEJORADA: Expandimos a 1200px en monitores grandes */
 @media (min-width: 768px) { 
   .card-wide { 
     max-width: 1200px !important; 

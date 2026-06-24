@@ -96,7 +96,8 @@ export const saveAuditLog = async (action, userEmail, type = 'info') => {
 };
 
 /**
- * 4. GESTIÓN DE TERAPEUTAS
+ * 4. GESTIÓN DE TERAPEUTAS (GUARDAR EN FIRESTORE)
+ * Guarda la ficha del usuario en la colección correspondiente.
  */
 export const saveTherapistToCloud = async (therapistData) => {
   try {
@@ -108,6 +109,39 @@ export const saveTherapistToCloud = async (therapistData) => {
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error("❌ Error al crear terapeuta:", error);
-    return { success: false, error: error.message };
+    // Lanzamos el error para que la vista pueda atraparlo y mostrar la alerta
+    throw error;
+  }
+};
+
+/**
+ * 5. GESTIÓN DE TERAPEUTAS (OBTENER DE FIRESTORE)
+ * Descarga la lista de terapeutas para poblar el "Directorio Activo".
+ */
+export const getTherapistsFromCloud = async () => {
+  try {
+    // Usamos orderBy si queremos ordenar por fecha de creación
+    const q = query(collection(db, THERAPISTS_COLLECTION), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const therapists = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    return { success: true, data: therapists };
+  } catch (error) {
+    console.error("❌ Error al descargar terapeutas:", error);
+    // Si la consulta compuesta falla (por ejemplo, falta el índice de Firebase), caemos a la consulta simple
+    try {
+        const querySnapshotFallback = await getDocs(collection(db, THERAPISTS_COLLECTION));
+        const therapistsFallback = querySnapshotFallback.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        return { success: true, data: therapistsFallback };
+    } catch (fallbackError) {
+        return { success: false, data: [], error: fallbackError.message };
+    }
   }
 };

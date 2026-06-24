@@ -1,8 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 
-// IMPORTACIÓN DE LOS NUEVOS COMPONENTES MODULARES (Mejoras, Mapas, IA)
-import TherapistManager from '../modules/TherapistManager.vue'
+// IMPORTACIÓN DE LOS COMPONENTES MODULARES (Mapas, IA, Leaderboard)
+// Nota: Hemos eliminado TherapistManager de aquí porque ahora tiene su propia pantalla gigante.
 import AiInsightsPanel from '../modules/AiInsightsPanel.vue'
 import GeographicHotspots from '../modules/GeographicHotspots.vue'
 import TherapistLeaderboard from '../modules/TherapistLeaderboard.vue'
@@ -50,6 +50,10 @@ defineProps({
     required: true
   }
 })
+
+// --- COMUNICACIÓN CON EL ORQUESTADOR (App.vue) ---
+// Emitimos este evento para avisar que queremos ir a la pantalla de crear usuarios
+const emit = defineEmits(['onManageUsers'])
 
 // --- ESTADO: Métricas Globales (KPIs) ---
 const kpis = ref({
@@ -110,16 +114,6 @@ const barOptions = {
     }
   }
 }
-
-// --- MANEJADORES DE EVENTOS ---
-const handleTherapistAdded = () => { 
-  kpis.value.activeCases += 1
-  kpis.value.totalInterventions += 1 
-}
-
-const handleTherapistRemoved = () => { 
-  kpis.value.activeCases -= 1 
-}
 </script>
 
 <template>
@@ -172,11 +166,17 @@ const handleTherapistRemoved = () => {
     </div>
 
     <div class="full-width-module">
-      <TherapistManager 
-        @on-therapist-added="handleTherapistAdded" 
-        @on-therapist-removed="handleTherapistRemoved" 
-      />
+      <div class="admin-actions-banner glass-panel">
+        <div class="banner-text">
+          <h3>👥 Directorio de Personal</h3>
+          <p>Administra accesos, roles y credenciales de los terapeutas de terreno (Validación RUT/Pasaporte).</p>
+        </div>
+        <button class="btn-manage" @click="emit('onManageUsers')">
+          Abrir Gestión de Usuarios ➡
+        </button>
+      </div>
     </div>
+
   </div>
 </template>
 
@@ -273,6 +273,50 @@ const handleTherapistRemoved = () => {
   color: #6ee7b7; 
   border-bottom: 1px solid rgba(255, 255, 255, 0.08); 
   padding-bottom: 10px; 
+}
+
+/* --- ESTILOS DEL NUEVO BANNER DE GESTIÓN DE USUARIOS --- */
+.admin-actions-banner {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  border-left: 4px solid #3b82f6;
+  padding: 18px 25px;
+}
+
+.admin-actions-banner h3 {
+  border: none;
+  padding: 0;
+  margin: 0 0 5px 0;
+  color: white;
+  font-size: 1.2rem;
+}
+
+.admin-actions-banner p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-manage {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-manage:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
 }
 
 .text-blue { color: #60a5fa; }
