@@ -5,7 +5,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LoginView from './components/views/LoginView.vue'
 import DashboardView from './components/views/DashboardView.vue'
 import AdminDashboard from './components/views/AdminDashboard.vue'
-import UserManagementView from './components/views/UserManagementView.vue' // <-- NUEVA VISTA IMPORTADA
+import UserManagementView from './components/views/UserManagementView.vue'
+import AuditLogsView from './components/views/AuditLogsView.vue' // <-- NUEVA VISTA INYECTADA
 
 // --- IMPORTACIÓN DE MÓDULOS DE FLUJO ---
 import SecurityMfa from './components/modules/SecurityMfa.vue'
@@ -68,9 +69,10 @@ const currentHelpInfo = computed(() => {
   const helps = {
     'login': { title: 'Acceso al Sistema', desc: 'Ingresa tu correo institucional y contraseña proporcionada por la administración.' },
     'mfa': { title: 'Verificación de Seguridad', desc: 'Hemos enviado un código de 6 números a tu teléfono móvil para confirmar tu identidad.' },
-    'role-select': { title: 'Selección de Módulo', desc: 'Elige el "Panel de Supervisión" para analíticas o el "Panel de Terreno" para capturas.' },
+    'role-select': { title: 'Selección de Módulo', desc: 'Elige el "Panel de Supervisión" para analíticas, el "Panel de Terreno" para capturas o la "Consola TI".' },
     'admin-dashboard': { title: 'Panel de Supervisión', desc: 'Área exclusiva para revisión de estadísticas, auditorías y gestión de equipo.' },
-    'user-management': { title: 'Gestión de Personal', desc: 'Área para crear cuentas a nuevos terapeutas. Genera RUT o Pasaportes válidos.' }, // <-- NUEVA AYUDA
+    'user-management': { title: 'Gestión de Personal', desc: 'Área para crear, editar o eliminar cuentas de terapeutas. Administra RUT o Pasaportes válidos.' },
+    'audit-logs': { title: 'Centro de Monitoreo TI', desc: 'Consola de comandos exclusiva para auditoría forense de accesos por dirección IP.' }, // <-- NUEVA PÁGINA AYUDA
     'dashboard': { title: 'Historial Clínico', desc: 'Presiona el botón verde "Nueva Intervención" para iniciar un registro por voz.' },
     'type-select': { title: 'Selección de Plantilla', desc: 'Elige la opción que mejor describa la atención para guiar la estructura del modelo IA.' },
     'capture': { title: 'Asistente de Voz IA', desc: 'Habla naturalmente sobre el paciente. El sistema procesará tu relato al presionar Detener.' },
@@ -124,10 +126,11 @@ onUnmounted(() => {
   window.removeEventListener('offline', updateOnlineStatus)
 })
 
-// --- DETERMINACIÓN LOGICA DE ROLES ---
-const isAdmin = computed(() => {
-  if (!currentUser.value || !currentUser.value.email) return false
-  return currentUser.value.email.toLowerCase().includes('admin')
+// --- DETERMINACIÓN LÓGICA DE PRIVILEGIOS DE MENÚ ---
+const hasMenuAccess = computed(() => {
+  if (!currentUser.value || !currentUser.value.role) return false
+  // Tienen botón de Menú de retorno tanto los administradores como el soporte tecnológico
+  return currentUser.value.role === 'admin' || currentUser.value.role === 'ti'
 })
 
 // --- SÍNCRONIZADOR DE RESPALDOS OFFLINE ---
@@ -158,15 +161,19 @@ const syncOfflineDrafts = async () => {
 
 // --- FLUJOS DE ENRUTAMIENTO DINÁMICO ---
 const handleLoginSuccess = (user) => { currentUser.value = user; currentStep.value = 'mfa' }
-const handleMfaVerified = () => { currentStep.value = isAdmin.value ? 'role-select' : 'dashboard' }
+const handleMfaVerified = () => { 
+  // Si el rol es admin o ti, los mandamos a elegir módulo. Si no, a terreno directo.
+  currentStep.value = (currentUser.value.role === 'admin' || currentUser.value.role === 'ti') ? 'role-select' : 'dashboard' 
+}
 const handleLogout = () => { currentUser.value = null; currentStep.value = 'login' }
 const goToRoleSelect = () => { currentStep.value = 'role-select' }
 const startNewIntervention = () => { currentStep.value = 'type-select' }
 const handleTypeSelected = (typeId) => { selectedTemplate.value = typeId; currentStep.value = 'capture' }
 
-// <--- NUEVOS ENRUTADORES PARA GESTIÓN DE USUARIOS --->
+// ENRUTADORES DE SUBMÓDULOS DE ADMINISTRACIÓN Y TECNOLOGÍA
 const goToUserManagement = () => { currentStep.value = 'user-management' }
 const backToAdminDashboard = () => { currentStep.value = 'admin-dashboard' }
+const backToRoleSelect = () => { currentStep.value = 'role-select' }
 
 const handleRawProcessed = (text) => {
   rawTranscript.value = text
@@ -277,7 +284,7 @@ const returnToDashboard = () => {
           <div class="header-top">
             <div class="logo-mini">🌱</div>
             <div class="header-actions">
-              <button v-if="isAdmin && (currentStep === 'dashboard' || currentStep === 'admin-dashboard' || currentStep === 'user-management')" class="btn-secondary-mini" @click="goToRoleSelect">⬅ Menú</button>
+              <button v-if="hasMenuAccess && (currentStep === 'dashboard' || currentStep === 'admin-dashboard' || currentStep === 'user-management' || currentStep === 'audit-logs')" class="btn-secondary-mini" @click="goToRoleSelect">⬅ Menú</button>
               <button v-else-if="currentStep === 'type-select' || currentStep === 'capture' || currentStep === 'privacy' || currentStep === 'review' || currentStep === 'success'" class="btn-back" @click="returnToDashboard">Volver al Panel</button>
               <button class="btn-logout" @click="handleLogout">Salir</button>
             </div>
@@ -287,17 +294,25 @@ const returnToDashboard = () => {
         </header>
 
         <LoginView v-if="currentStep === 'login'" @on-login-success="handleLoginSuccess" />
+        
         <SecurityMfa v-else-if="currentStep === 'mfa'" @on-verified="handleMfaVerified" @on-cancel="currentStep = 'login'" />
+        
         <RoleSelector v-else-if="currentStep === 'role-select'" :user="currentUser" @on-select-module="currentStep = $event" />
         
         <AdminDashboard v-else-if="currentStep === 'admin-dashboard'" :user="currentUser" @on-manage-users="goToUserManagement" />
         
         <UserManagementView v-else-if="currentStep === 'user-management'" @on-back="backToAdminDashboard" />
+        
+        <AuditLogsView v-else-if="currentStep === 'audit-logs'" @on-back="backToRoleSelect" />
 
         <DashboardView v-else-if="currentStep === 'dashboard'" :user="currentUser" :activities="globalActivities" @on-new-intervention="startNewIntervention" />
+        
         <InterventionTypeSelector v-else-if="currentStep === 'type-select'" @on-select-type="handleTypeSelected" @on-cancel="currentStep = 'dashboard'" />
+        
         <AudioCapture v-else-if="currentStep === 'capture'" @on-processed="handleRawProcessed" />
+        
         <PrivacyAnonymizer v-else-if="currentStep === 'privacy'" :raw-transcript="rawTranscript" @on-sanitized="handlePrivacySanitized" @on-cancel="currentStep = 'capture'" />
+        
         <InterventionReview v-else-if="currentStep === 'review'" :initial-data="interventionData" @on-saved="handleSaveSuccess" />
 
         <div v-else-if="currentStep === 'success'" class="success-screen">
@@ -331,6 +346,7 @@ const returnToDashboard = () => {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover;
   object-position: center; z-index: 0; filter: blur(6px) brightness(0.65); transform: scale(1.05); pointer-events: none; 
 }
+.bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; object-position: center; z-index: 0; filter: blur(6px) brightness(0.65); transform: scale(1.05); pointer-events: none; }
 .bg-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.2); z-index: 1; transition: background 0.5s ease; }
 .overlay-darker { background: rgba(19, 78, 94, 0.4); }
 
@@ -340,6 +356,8 @@ const returnToDashboard = () => {
   width: calc(100% - 40px); max-width: 480px; box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
   color: white; text-align: center; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-sizing: border-box; margin-top: auto; margin-bottom: 60px; 
 }
+
+/* RESPONSIVIDAD: Ajuste maestro de 1200px para aprovechar los monitores en PC */
 @media (min-width: 768px) { 
   .card-wide { 
     max-width: 1200px !important; 

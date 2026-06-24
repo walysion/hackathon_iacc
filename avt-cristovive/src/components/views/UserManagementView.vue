@@ -1,6 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { saveTherapistToCloud, getTherapistsFromCloud } from '../../services/database.js'
+import { 
+  saveTherapistToCloud, 
+  getTherapistsFromCloud, 
+  updateTherapistInCloud, 
+  deleteTherapistFromCloud 
+} from '../../services/database.js'
 
 const emit = defineEmits(['onBack'])
 
@@ -11,20 +16,23 @@ const formData = ref({
   documento: '',
   telefono: '',
   correo: '',
-  password: '', // <-- NUEVO CAMPO DE CONTRASEÑA
-  rol: 'terapeuta'
+  password: '', 
+  rol: 'terapeuta' // Valor por defecto
 })
 
 const usuariosActivos = ref([])
-const successMsg = ref(false)
+const successMsg = ref('')
 const isSaving = ref(false)
+
+// Modos de Edición
+const isEditing = ref(false)
+const editUserId = ref(null)
 
 // --- CARGA INICIAL DESDE FIREBASE ---
 onMounted(async () => {
   try {
     const res = await getTherapistsFromCloud()
     if (res.success) {
-      // Ordenamos para que los más nuevos salgan arriba
       usuariosActivos.value = res.data.sort((a, b) => b.createdAt - a.createdAt)
     }
   } catch (e) {
@@ -54,46 +62,108 @@ const formatPhone = (e) => {
   formData.value.telefono = valor
 }
 
-// --- GENERADOR DE CONTRASEÑAS ---
 const generarClave = () => {
-  // Genera una clave aleatoria formato TK-XXXXXX
   const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase()
   formData.value.password = `TK-${randomStr}`
 }
 
-// --- ACCIÓN DE GUARDADO EN FIREBASE ---
-const handleCreateUser = async () => {
+// --- ACCIONES CRUD: CREAR O ACTUALIZAR ---
+const handleSubmit = async () => {
   if (!formData.value.nombre || !formData.value.documento || !formData.value.correo || !formData.value.password) return
   isSaving.value = true
 
   const prefijoDoc = formData.value.tipoDoc === 'rut' ? 'RUT:' : 'PAS:'
-  const nuevoUsuario = {
+  
+  // --- LÓGICA DE 3 ROLES ---
+  let rolFormateado = 'Terapeuta de Terreno'
+  if (formData.value.rol === 'admin') rolFormateado = 'Supervisor General'
+  else if (formData.value.rol === 'ti') rolFormateado = 'Soporte TI'
+
+  const payloadData = {
     nombre: formData.value.nombre,
     documento: `${prefijoDoc} ${formData.value.documento}`,
-    telefono: `+56 ${formData.value.telefono}`,
+    telefono: formData.value.telefono.startsWith('+56') ? formData.value.telefono : `+56 ${formData.value.telefono}`,
     correo: formData.value.correo,
-    password: formData.value.password, // Solo para la demo de la Hackathon
-    rol: formData.value.rol === 'admin' ? 'Supervisor General' : 'Terapeuta de Terreno',
+    password: formData.value.password,
+    rol: rolFormateado,
     estado: 'Activo'
   }
 
   try {
-    const res = await saveTherapistToCloud(nuevoUsuario)
-    
-    // Actualizar la lista en pantalla instantáneamente
-    if (res.success) {
-      usuariosActivos.value.unshift({ id: res.id, ...nuevoUsuario })
-      successMsg.value = true
-      
-      // Limpiar formulario
-      formData.value = { nombre: '', tipoDoc: 'rut', documento: '', telefono: '', correo: '', password: '', rol: 'terapeuta' }
-      setTimeout(() => { successMsg.value = false }, 5000)
+    if (isEditing.value) {
+      // MODO ACTUALIZAR
+      await updateTherapistInCloud(editUserId.value, payloadData)
+      const index = usuariosActivos.value.findIndex(u => u.id === editUserId.value)
+      if (index !== -1) {
+        usuariosActivos.value[index] = { ...usuariosActivos.value[index], ...payloadData }
+      }
+      successMsg.value = '✅ Usuario actualizado exitosamente.'
+    } else {
+      // MODO CREAR
+      const res = await saveTherapistToCloud(payloadData)
+      if (res.success) {
+        usuariosActivos.value.unshift({ id: res.id, ...payloadData, createdAt: new Date() })
+        successMsg.value = '✅ Usuario registrado exitosamente. ¡Comparte la clave!'
+      }
     }
+    
+    resetForm()
+    setTimeout(() => { successMsg.value = '' }, 4000)
   } catch (error) {
-    alert("Hubo un error guardando el usuario en la nube.")
+    alert("Hubo un error comunicándose con la nube.")
   } finally {
     isSaving.value = false
   }
+}
+
+// --- ACCIONES CRUD: EDITAR (Preparar formulario) ---
+const openEditForm = (user) => {
+  const isRut = user.documento.startsWith('RUT:')
+  const docLimpio = user.documento.replace('RUT: ', '').replace('PAS: ', '')
+  const telLimpio = user.telefono.replace('+56 ', '')
+
+  // Identificar el rol interno para el select
+  let rolInterno = 'terapeuta'
+  if (user.rol === 'Supervisor General') rolInterno = 'admin'
+  else if (user.rol === 'Soporte TI') rolInterno = 'ti'
+
+  formData.value = {
+    nombre: user.nombre,
+    tipoDoc: isRut ? 'rut' : 'pasaporte',
+    documento: docLimpio,
+    telefono: telLimpio,
+    correo: user.correo,
+    password: user.password || '',
+    rol: rolInterno
+  }
+  
+  isEditing.value = true
+  editUserId.value = user.id
+}
+
+// --- ACCIONES CRUD: ELIMINAR ---
+const handleDelete = async (user) => {
+  // ESCUDO DE PROTECCIÓN MAESTRO
+  const isAdminMaestro = user.nombre.toLowerCase().includes('walter guerrero')
+  if (isAdminMaestro) {
+    alert('⛔ ACCESO DENEGADO: No tienes permisos para eliminar la cuenta del Creador/Administrador Maestro del sistema.')
+    return
+  }
+
+  if (confirm(`¿Estás completamente seguro de eliminar a ${user.nombre}? Esta acción no se puede deshacer.`)) {
+    try {
+      await deleteTherapistFromCloud(user.id)
+      usuariosActivos.value = usuariosActivos.value.filter(u => u.id !== user.id)
+    } catch (e) {
+      alert("Error al intentar eliminar el usuario.")
+    }
+  }
+}
+
+const resetForm = () => {
+  formData.value = { nombre: '', tipoDoc: 'rut', documento: '', telefono: '', correo: '', password: '', rol: 'terapeuta' }
+  isEditing.value = false
+  editUserId.value = null
 }
 </script>
 
@@ -109,10 +179,15 @@ const handleCreateUser = async () => {
 
     <div class="split-layout">
       <div class="form-panel glass-panel">
-        <h3>Crear Nuevo Usuario</h3>
-        <p class="desc">Genera la clave temporal y compártela de forma segura con el especialista.</p>
+        <div class="form-header">
+          <h3>{{ isEditing ? '✏️ Editar Especialista' : 'Crear Nuevo Usuario' }}</h3>
+          <button v-if="isEditing" class="btn-cancel" @click="resetForm" title="Cancelar edición">✖</button>
+        </div>
+        <p class="desc">
+          {{ isEditing ? 'Actualiza los datos o genera una nueva clave de acceso.' : 'Genera la clave temporal y compártela de forma segura.' }}
+        </p>
         
-        <form @submit.prevent="handleCreateUser" class="creation-form">
+        <form @submit.prevent="handleSubmit" class="creation-form">
           <div class="input-group">
             <label>Nombre Completo</label>
             <input type="text" v-model="formData.nombre" placeholder="Ej: Juan Pérez González" required />
@@ -146,7 +221,7 @@ const handleCreateUser = async () => {
             </div>
 
             <div class="input-group">
-              <label>Contraseña Temporal</label>
+              <label>Contraseña Acceso</label>
               <div class="password-wrapper">
                 <input type="text" v-model="formData.password" placeholder="Ingresa o genera clave" required />
                 <button type="button" class="btn-generate" @click="generarClave" title="Generar clave automática">🎲</button>
@@ -159,17 +234,16 @@ const handleCreateUser = async () => {
             <select v-model="formData.rol">
               <option value="terapeuta">Terapeuta Estándar (Solo Terreno)</option>
               <option value="admin">Supervisor General (Acceso a Analíticas)</option>
+              <option value="ti">Soporte TI (Auditoría y Redes)</option>
             </select>
           </div>
 
-          <button type="submit" class="btn-submit" :disabled="isSaving">
-            {{ isSaving ? 'Registrando en el sistema...' : '+ Registrar Especialista' }}
+          <button type="submit" :class="['btn-submit', isEditing ? 'btn-update' : '']" :disabled="isSaving">
+            {{ isSaving ? 'Guardando...' : (isEditing ? '💾 Guardar Cambios' : '+ Registrar Especialista') }}
           </button>
 
           <Transition name="fade">
-            <div v-if="successMsg" class="success-alert">
-              ✅ Usuario registrado exitosamente. <strong>¡Copia la contraseña y envíasela al terapeuta!</strong>
-            </div>
+            <div v-if="successMsg" class="success-alert" v-html="successMsg"></div>
           </Transition>
         </form>
       </div>
@@ -177,14 +251,28 @@ const handleCreateUser = async () => {
       <div class="list-panel glass-panel">
         <h3>Directorio Activo (Firestore)</h3>
         <ul class="user-list" v-if="usuariosActivos.length > 0">
-          <li v-for="user in usuariosActivos" :key="user.id" class="user-item">
+          <li v-for="user in usuariosActivos" :key="user.id" :class="['user-item', { 'editing-active': editUserId === user.id }]">
             <div class="user-info">
-              <span class="user-name">{{ user.nombre }} <span class="badge">{{ user.rol }}</span></span>
+              <span class="user-name">
+                {{ user.nombre }} 
+                <span v-if="user.nombre.toLowerCase().includes('walter guerrero')" title="Cuenta Maestra Protegida">👑</span>
+                <span class="badge">{{ user.rol }}</span>
+              </span>
               <span class="user-details">{{ user.documento }} | {{ user.correo }}</span>
               <span class="user-details credential-text">Clave de Acceso: <strong>{{ user.password }}</strong></span>
             </div>
-            <div class="user-status">
-              <span class="status-dot dot-active"></span> {{ user.estado }}
+            
+            <div class="user-actions">
+              <span class="status-indicator"><span class="status-dot dot-active"></span> {{ user.estado }}</span>
+              <div class="action-buttons">
+                <button class="btn-action edit" @click="openEditForm(user)" title="Editar datos">✏️</button>
+                <button 
+                  class="btn-action delete" 
+                  @click="handleDelete(user)" 
+                  :disabled="user.nombre.toLowerCase().includes('walter guerrero')"
+                  :title="user.nombre.toLowerCase().includes('walter guerrero') ? 'Protegido: No se puede eliminar' : 'Eliminar usuario'"
+                >🗑️</button>
+              </div>
             </div>
           </li>
         </ul>
@@ -209,8 +297,12 @@ const handleCreateUser = async () => {
 .split-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 900px) { .split-layout { grid-template-columns: 1fr; } }
 .glass-panel { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 25px; text-align: left; }
-.glass-panel h3 { margin: 0 0 5px 0; color: #6ee7b7; font-size: 1.2rem; }
-.desc { color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 20px; }
+.form-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.glass-panel h3 { margin: 0; color: #6ee7b7; font-size: 1.2rem; }
+.btn-cancel { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; transition: 0.2s; }
+.btn-cancel:hover { background: #ef4444; color: white; transform: scale(1.1); }
+
+.desc { color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 20px; margin-top: 0; }
 .creation-form { display: flex; flex-direction: column; gap: 15px; }
 .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .input-group { display: flex; flex-direction: column; gap: 5px; }
@@ -226,30 +318,42 @@ input:focus, select:focus { border-color: #34d399; }
 .phone-prefix { padding: 12px 10px; background: rgba(255,255,255,0.05); color: #9ca3af; font-weight: bold; border-right: 1px solid rgba(255, 255, 255, 0.1); }
 .phone-wrapper input { border: none; background: transparent; border-radius: 0; width: 100%; }
 
-/* Estilos de la Contraseña */
 .password-wrapper { display: flex; align-items: center; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; overflow: hidden; }
 .password-wrapper:focus-within { border-color: #34d399; }
 .password-wrapper input { border: none; background: transparent; border-radius: 0; width: 100%; }
 .btn-generate { background: rgba(255,255,255,0.1); color: white; border: none; padding: 12px; border-left: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; transition: 0.2s; font-size: 1.1rem; }
 .btn-generate:hover { background: rgba(16, 185, 129, 0.2); }
 
-.btn-submit { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 14px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; transition: transform 0.2s; }
+.btn-submit { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 14px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; transition: transform 0.2s, box-shadow 0.2s; }
 .btn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4); }
+.btn-update { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.btn-update:hover:not(:disabled) { box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); }
 .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
 
 .success-alert { background: rgba(16, 185, 129, 0.15); border: 1px solid #34d399; color: #a7f3d0; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-.user-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.user-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; }
+.user-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.user-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s; }
+.user-item:hover { background: rgba(255,255,255,0.06); }
+.editing-active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); box-shadow: 0 0 10px rgba(59, 130, 246, 0.2); }
 .user-info { display: flex; flex-direction: column; gap: 4px; }
-.user-name { font-weight: bold; color: white; display: flex; align-items: center; gap: 10px; }
+.user-name { font-weight: bold; color: white; display: flex; align-items: center; gap: 8px; }
 .badge { background: rgba(59, 130, 246, 0.15); color: #93c5fd; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
 .user-details { font-size: 0.75rem; color: #9ca3af; }
 .credential-text { color: #fcd34d; font-family: monospace; font-size: 0.8rem; margin-top: 2px; }
-.user-status { font-size: 0.8rem; color: rgba(255,255,255,0.7); display: flex; align-items: center; gap: 6px; }
+
+.user-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.status-indicator { font-size: 0.8rem; color: rgba(255,255,255,0.7); display: flex; align-items: center; gap: 6px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot-active { background: #10b981; }
+
+.action-buttons { display: flex; gap: 8px; }
+.btn-action { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; font-size: 1rem; }
+.btn-action.edit:hover { background: rgba(59, 130, 246, 0.2); border-color: #60a5fa; transform: scale(1.1); }
+.btn-action.delete:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); border-color: #f87171; transform: scale(1.1); }
+.btn-action:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(100%); }
+
 .empty-state { text-align: center; padding: 30px; color: rgba(255,255,255,0.5); font-size: 0.9rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 10px; }
 </style>

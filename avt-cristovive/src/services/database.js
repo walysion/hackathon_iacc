@@ -5,7 +5,10 @@ import {
   getDocs, 
   query, 
   orderBy, 
-  serverTimestamp 
+  serverTimestamp,
+  doc,          // <-- NUEVO
+  updateDoc,    // <-- NUEVO
+  deleteDoc     // <-- NUEVO
 } from 'firebase/firestore';
 
 // Nombres de colecciones centralizados
@@ -30,13 +33,10 @@ const cleanDataForFirestore = (data) => {
 
 /**
  * 1. GUARDAR INTERVENCIÓN CLÍNICA
- * Incluye validación de datos y captura de errores técnicos detallados.
  */
 export const saveInterventionToCloud = async (interventionData, userEmail) => {
   try {
-    // Limpiamos los datos antes de enviarlos para evitar el error "Unsupported field value: undefined"
     const safeData = cleanDataForFirestore(interventionData);
-
     const docRef = await addDoc(collection(db, INTERVENTIONS_COLLECTION), {
       ...safeData,
       therapistEmail: userEmail || 'usuario_anonimo',
@@ -47,14 +47,10 @@ export const saveInterventionToCloud = async (interventionData, userEmail) => {
         version: '1.2.0'
       }
     });
-
     console.log("✅ Éxito en Firestore. ID:", docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
-    // Si el error es de permisos o cuotas, lo sabremos aquí
     console.error("❌ ERROR CRÍTICO FIRESTORE:", error.code, error.message);
-    
-    // Devolvemos el error detallado para que App.vue lo muestre en el Toast
     throw error; 
   }
 };
@@ -66,12 +62,10 @@ export const getInterventionsFromCloud = async () => {
   try {
     const q = query(collection(db, INTERVENTIONS_COLLECTION), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
-    
     const interventions = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
-    
     return { success: true, data: interventions };
   } catch (error) {
     console.error("❌ Error al descargar historial:", error);
@@ -96,8 +90,7 @@ export const saveAuditLog = async (action, userEmail, type = 'info') => {
 };
 
 /**
- * 4. GESTIÓN DE TERAPEUTAS (GUARDAR EN FIRESTORE)
- * Guarda la ficha del usuario en la colección correspondiente.
+ * 4. GESTIÓN DE TERAPEUTAS (CREAR)
  */
 export const saveTherapistToCloud = async (therapistData) => {
   try {
@@ -109,30 +102,24 @@ export const saveTherapistToCloud = async (therapistData) => {
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error("❌ Error al crear terapeuta:", error);
-    // Lanzamos el error para que la vista pueda atraparlo y mostrar la alerta
     throw error;
   }
 };
 
 /**
- * 5. GESTIÓN DE TERAPEUTAS (OBTENER DE FIRESTORE)
- * Descarga la lista de terapeutas para poblar el "Directorio Activo".
+ * 5. GESTIÓN DE TERAPEUTAS (LEER)
  */
 export const getTherapistsFromCloud = async () => {
   try {
-    // Usamos orderBy si queremos ordenar por fecha de creación
     const q = query(collection(db, THERAPISTS_COLLECTION), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
-    
     const therapists = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
-    
     return { success: true, data: therapists };
   } catch (error) {
     console.error("❌ Error al descargar terapeutas:", error);
-    // Si la consulta compuesta falla (por ejemplo, falta el índice de Firebase), caemos a la consulta simple
     try {
         const querySnapshotFallback = await getDocs(collection(db, THERAPISTS_COLLECTION));
         const therapistsFallback = querySnapshotFallback.docs.map(doc => ({
@@ -143,5 +130,57 @@ export const getTherapistsFromCloud = async () => {
     } catch (fallbackError) {
         return { success: false, data: [], error: fallbackError.message };
     }
+  }
+};
+
+/**
+ * 6. GESTIÓN DE TERAPEUTAS (ACTUALIZAR) <-- ¡NUEVA!
+ */
+export const updateTherapistInCloud = async (id, therapistData) => {
+  try {
+    const safeTherapist = cleanDataForFirestore(therapistData);
+    const docRef = doc(db, THERAPISTS_COLLECTION, id);
+    await updateDoc(docRef, safeTherapist);
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Error al actualizar terapeuta:", error);
+    throw error;
+  }
+};
+
+/**
+ * 7. GESTIÓN DE TERAPEUTAS (ELIMINAR) <-- ¡NUEVA!
+ */
+export const deleteTherapistFromCloud = async (id) => {
+  try {
+    const docRef = doc(db, THERAPISTS_COLLECTION, id);
+    await deleteDoc(docRef);
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Error al eliminar terapeuta:", error);
+    throw error;
+  }
+};
+
+
+/**
+ * 8. OBTENER LOGS DE AUDITORÍA (EXCLUSIVO TI)
+ */
+export const getAuditLogsFromCloud = async () => {
+  try {
+    const q = query(collection(db, LOGS_COLLECTION), orderBy('timestamp', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const logs = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      // Formateamos la fecha de Firebase para que sea legible
+      timeFormatted: doc.data().timestamp?.toDate().toLocaleString('es-CL') || 'Reciente'
+    }));
+    
+    return { success: true, data: logs };
+  } catch (error) {
+    console.error("❌ Error al descargar logs:", error);
+    throw error;
   }
 };

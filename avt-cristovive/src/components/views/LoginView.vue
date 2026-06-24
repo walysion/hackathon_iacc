@@ -1,7 +1,10 @@
 <script setup>
 import { ref } from 'vue'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../../firebase'
+import { collection, query, where, getDocs } from 'firebase/firestore'
+import { auth, db } from '../../firebase'
+// Importamos la función de auditoría que ya tenías lista en tu database.js
+import { saveAuditLog } from '../../services/database.js'
 
 const emit = defineEmits(['onLoginSuccess'])
 
@@ -12,33 +15,70 @@ const twoFactorCode = ref('')
 const loginStep = ref('credentials') // 'credentials' | '2fa'
 const isLoading = ref(false)
 const errorMessage = ref('')
-const showPassword = ref(false) // <-- NUEVO: Controla la visibilidad de la contraseña
+const showPassword = ref(false)
 
-// Almacenamos temporalmente el usuario real de Firebase entre pasos
+// Almacenamos temporalmente el usuario real o simulado entre pasos
 const pendingFirebaseUser = ref(null)
 
-// Login Real con Firebase
+// --- OBTENER IP DEL CLIENTE PARA AUDITORÍA ---
+const getClientIP = async () => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json')
+    const data = await response.json()
+    return data.ip
+  } catch (error) {
+    return 'IP_Desconocida'
+  }
+}
+
+// --- LOGIN HÍBRIDO (AUTH + FIRESTORE FALLBACK) ---
 const handleLogin = async () => {
   isLoading.value = true
   errorMessage.value = ''
   
+  // Capturamos la IP del usuario que intenta entrar
+  const currentIp = await getClientIP()
+  
   try {
-    // Intentamos iniciar sesión con la base de datos real
+    // INTENTO 1: Iniciar sesión con Firebase Auth (El Guardia Oficial)
     const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value)
-    
-    // Guardamos la instancia del usuario de Firebase para usar su UID después
     pendingFirebaseUser.value = userCredential.user
     
-    // Si la contraseña y correo son correctos en Firebase, pasamos al 2FA
+    // Log de auditoría exitoso
+    await saveAuditLog(`Login exitoso (Auth Oficial) - IP: ${currentIp}`, email.value, 'success')
     loginStep.value = '2fa'
+
   } catch (error) {
-    console.error("Error de autenticación:", error.code)
-    if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+    // Si Auth falla, ejecutamos el INTENTO 2: Buscar en la colección "therapists" (Login Híbrido MVP)
+    try {
+      const q = query(
+        collection(db, 'therapists'), 
+        where('correo', '==', email.value), 
+        where('password', '==', password.value)
+      )
+      const querySnapshot = await getDocs(q)
+
+      if (!querySnapshot.empty) {
+        // ¡Se encontró en Firestore! Simulamos un inicio de sesión exitoso
+        const userData = querySnapshot.docs[0].data()
+        pendingFirebaseUser.value = {
+          uid: querySnapshot.docs[0].id,
+          ...userData,
+          isHybridLogin: true // Marcador interno
+        }
+
+        // Log de auditoría exitoso (Híbrido)
+        await saveAuditLog(`Login exitoso (Modo Híbrido/Firestore) - IP: ${currentIp}`, email.value, 'success')
+        loginStep.value = '2fa'
+
+      } else {
+        // No se encontró ni en Auth ni en la base de datos
+        throw new Error('Credenciales inválidas absolutas')
+      }
+    } catch (fallbackError) {
+      // Log de auditoría de intento fallido o posible intrusión
+      await saveAuditLog(`Intento fallido o bloqueado - IP: ${currentIp}`, email.value, 'warning')
       errorMessage.value = 'Credenciales inválidas. Verifica tu correo y contraseña.'
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage.value = 'Demasiados intentos fallidos. Cuenta bloqueada temporalmente por seguridad.'
-    } else {
-      errorMessage.value = 'Ocurrió un error al intentar acceder. Intenta nuevamente.'
     }
   } finally {
     isLoading.value = false
@@ -50,23 +90,37 @@ const filterNumeric = (event) => {
   twoFactorCode.value = event.target.value.replace(/\D/g, '')
 }
 
-// Simulación de validación de Doble Factor (2FA) y Asignación de Roles
+// Simulación de validación de Doble Factor (2FA) y ASIGNACIÓN DE 3 ROLES
 const handle2FA = async () => {
   isLoading.value = true
   errorMessage.value = ''
   
-  await new Promise(resolve => setTimeout(resolve, 1500)) // Un poco más de tiempo para apreciar el spinner premium
+  await new Promise(resolve => setTimeout(resolve, 1500)) 
   
   if (twoFactorCode.value.length === 6) {
-    // REGLA DE NEGOCIO: Si el correo contiene "admin", es Jefatura Global (Super Admin)
-    const isCtrlAdmin = email.value.toLowerCase().includes('admin')
+    const emailLower = email.value.toLowerCase()
     
+    // Asignación de Roles e Identidades Dinámicas
+    let finalRole = 'terapeuta'
+    let finalName = pendingFirebaseUser.value?.nombre || pendingFirebaseUser.value?.email || email.value
+
+    // 1. ROL: ADMIN
+    if (emailLower.includes('admin') || pendingFirebaseUser.value?.rol === 'Supervisor General') {
+      finalRole = 'admin'
+      finalName = pendingFirebaseUser.value?.nombre || 'Dirección General Talita Kum'
+    } 
+    // 2. ROL: SOPORTE TI (Nuevo Rol con acceso a claves)
+    else if (emailLower.includes('ti') || emailLower.includes('soporte') || pendingFirebaseUser.value?.rol === 'Soporte TI') {
+      finalRole = 'ti'
+      finalName = pendingFirebaseUser.value?.nombre || 'Soporte Tecnológico'
+    }
+
     // Emitimos el evento fusionando los datos simulados con el objeto real de Firebase
     emit('onLoginSuccess', { 
-      ...pendingFirebaseUser.value, // Incluye UID, token, etc.
+      ...pendingFirebaseUser.value,
       email: email.value, 
-      role: isCtrlAdmin ? 'admin' : 'terapeuta', 
-      name: isCtrlAdmin ? 'Dirección Talita Kum' : 'Dr. Ángel Ramos'
+      role: finalRole, 
+      name: finalName
     })
   } else {
     errorMessage.value = 'Código de seguridad incorrecto. Debe contener 6 dígitos.'
@@ -87,7 +141,6 @@ const cancel2FA = () => {
 <template>
   <div class="login-content-wrapper animation-fade">
     
-    <!-- Encabezado unificado -->
     <div class="header-login">
       <div class="lock-icon-wrapper">
         <span class="lock-icon">{{ loginStep === 'credentials' ? '🔒' : '🛡️' }}</span>
@@ -96,7 +149,6 @@ const cancel2FA = () => {
       <p class="subtitle">Plataforma Segura - Talita Kum</p>
     </div>
 
-    <!-- PASO 1: Credenciales -->
     <form v-if="loginStep === 'credentials'" @submit.prevent="handleLogin" class="form-layout">
       
       <div class="form-group">
@@ -125,7 +177,6 @@ const cancel2FA = () => {
             required 
             :disabled="isLoading"
           />
-          <!-- Ojo interactivo para mostrar/ocultar contraseña -->
           <button 
             type="button" 
             class="btn-toggle-view"
@@ -139,11 +190,10 @@ const cancel2FA = () => {
 
       <button type="submit" class="btn-primary" :disabled="isLoading || !email || !password">
         <span v-if="isLoading" class="spinner"></span>
-        <span>{{ isLoading ? 'Verificando en servidor...' : 'Ingresar al Sistema' }}</span>
+        <span>{{ isLoading ? 'Verificando red de seguridad...' : 'Ingresar al Sistema' }}</span>
       </button>
     </form>
 
-    <!-- PASO 2: Doble Factor (2FA) -->
     <form v-else-if="loginStep === '2fa'" @submit.prevent="handle2FA" class="form-layout step-2fa">
       <p class="instruction-2fa">
         Hemos enviado un código de 6 dígitos a tu dispositivo móvil registrado para evitar accesos no autorizados.
@@ -175,7 +225,6 @@ const cancel2FA = () => {
       </div>
     </form>
 
-    <!-- Notificaciones de Error Dinámicas -->
     <p v-if="errorMessage" class="error-message animation-slide">
       ⚠️ {{ errorMessage }}
     </p>
@@ -249,7 +298,7 @@ const cancel2FA = () => {
 
 input {
   width: 100%;
-  padding: 14px 40px 14px 14px; /* Espacio extra a la derecha para los iconos internos */
+  padding: 14px 40px 14px 14px; 
   background: rgba(15, 23, 42, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
