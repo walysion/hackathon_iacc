@@ -8,55 +8,79 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
-// Referencias a nuestras "Tablas" en la nube
+// Nombres de colecciones centralizados
 const INTERVENTIONS_COLLECTION = 'interventions';
 const THERAPISTS_COLLECTION = 'therapists';
 const LOGS_COLLECTION = 'audit_logs';
 
 /**
+ * UTILIDAD: Limpiador de datos (PII & Firestore Safety)
+ * Firestore falla si un campo es 'undefined'. Esta función convierte 
+ * cualquier valor indefinido en 'null' o lo elimina para evitar errores.
+ */
+const cleanDataForFirestore = (data) => {
+  const clean = { ...data };
+  Object.keys(clean).forEach(key => {
+    if (clean[key] === undefined) {
+      clean[key] = null; // Firestore acepta null pero no undefined
+    }
+  });
+  return clean;
+};
+
+/**
  * 1. GUARDAR INTERVENCIÓN CLÍNICA
- * Toma los datos estructurados por la IA y los sube a la nube.
+ * Incluye validación de datos y captura de errores técnicos detallados.
  */
 export const saveInterventionToCloud = async (interventionData, userEmail) => {
   try {
+    // Limpiamos los datos antes de enviarlos para evitar el error "Unsupported field value: undefined"
+    const safeData = cleanDataForFirestore(interventionData);
+
     const docRef = await addDoc(collection(db, INTERVENTIONS_COLLECTION), {
-      ...interventionData,
-      therapistEmail: userEmail,
-      createdAt: serverTimestamp(), // Hora exacta y segura del servidor de Google
-      syncStatus: 'Sincronizado'
+      ...safeData,
+      therapistEmail: userEmail || 'usuario_anonimo',
+      createdAt: serverTimestamp(),
+      syncStatus: 'Sincronizado',
+      metadata: {
+        platform: 'Web Clinical Assistant',
+        version: '1.2.0'
+      }
     });
-    console.log("Intervención guardada con ID: ", docRef.id);
+
+    console.log("✅ Éxito en Firestore. ID:", docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error("Error al guardar en la nube: ", error);
-    return { success: false, error };
+    // Si el error es de permisos o cuotas, lo sabremos aquí
+    console.error("❌ ERROR CRÍTICO FIRESTORE:", error.code, error.message);
+    
+    // Devolvemos el error detallado para que App.vue lo muestre en el Toast
+    throw error; 
   }
 };
 
 /**
  * 2. OBTENER EL HISTORIAL DE INTERVENCIONES
- * Descarga los registros para mostrarlos en el Dashboard.
  */
 export const getInterventionsFromCloud = async () => {
   try {
     const q = query(collection(db, INTERVENTIONS_COLLECTION), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     
-    const interventions = [];
-    querySnapshot.forEach((doc) => {
-      interventions.push({ id: doc.id, ...doc.data() });
-    });
+    const interventions = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
     
     return { success: true, data: interventions };
   } catch (error) {
-    console.error("Error al descargar el historial: ", error);
-    return { success: false, data: [] };
+    console.error("❌ Error al descargar historial:", error);
+    return { success: false, data: [], error: error.message };
   }
 };
 
 /**
- * 3. GUARDAR LOG DE AUDITORÍA (Trazabilidad)
- * Registra quién hizo qué en el sistema.
+ * 3. GUARDAR LOG DE AUDITORÍA
  */
 export const saveAuditLog = async (action, userEmail, type = 'info') => {
   try {
@@ -67,22 +91,23 @@ export const saveAuditLog = async (action, userEmail, type = 'info') => {
       timestamp: serverTimestamp()
     });
   } catch (error) {
-    console.error("Error al guardar el log de auditoría: ", error);
+    console.error("⚠️ Fallo al registrar log de auditoría:", error);
   }
 };
 
 /**
- * 4. GESTIÓN DE TERAPEUTAS (Directiva)
+ * 4. GESTIÓN DE TERAPEUTAS
  */
 export const saveTherapistToCloud = async (therapistData) => {
   try {
+    const safeTherapist = cleanDataForFirestore(therapistData);
     const docRef = await addDoc(collection(db, THERAPISTS_COLLECTION), {
-      ...therapistData,
+      ...safeTherapist,
       createdAt: serverTimestamp()
     });
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error("Error al crear terapeuta: ", error);
-    return { success: false, error };
+    console.error("❌ Error al crear terapeuta:", error);
+    return { success: false, error: error.message };
   }
 };

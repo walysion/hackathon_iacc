@@ -129,7 +129,8 @@ onMounted(async () => {
   
   if (isOnline.value) {
     try {
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 3000))
+      // AUMENTADO A 8 SEGUNDOS PARA EVITAR FALSOS OFFLINE
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 8000))
       const dbRes = await Promise.race([getInterventionsFromCloud(), timeout])
       
       if (dbRes.success && dbRes.data.length > 0) {
@@ -143,6 +144,7 @@ onMounted(async () => {
         localStorage.setItem('talitakum_activities', JSON.stringify(formattedData))
       }
     } catch (e) {
+      console.error("🚨 ERROR AL CARGAR DATOS INICIALES:", e)
       console.log("Aviso: Ejecutando en modo puramente local.")
     }
     syncOfflineDrafts()
@@ -167,7 +169,8 @@ const syncOfflineDrafts = async () => {
 
   for (let act of pendingDrafts) {
     try {
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 3000))
+      // AUMENTADO A 8 SEGUNDOS
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Timeout')), 8000))
       await Promise.race([
         saveInterventionToCloud(act.rawData, currentUser.value?.email || 'offline_user'),
         timeout
@@ -176,7 +179,9 @@ const syncOfflineDrafts = async () => {
       act.time = 'Sincronizado automáticamente'
       delete act.rawData 
     } catch (e) {
-      console.log("Fallo al sincronizar borrador, se reintentará luego.")
+      // CAPTURADOR DE ERRORES REALES DE SINCRONIZACIÓN
+      console.error("🚨 ERROR AL SINCRONIZAR:", e)
+      triggerToast(`Fallo al sincronizar: ${e.message || 'Error desconocido'}`, 'error')
     }
   }
   localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
@@ -252,17 +257,23 @@ const handleSaveSuccess = async (savedData) => {
 
   if (isOnline.value) {
     try {
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Bloqueado')), 3000))
+      // AUMENTADO A 8 SEGUNDOS
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase Bloqueado o Lento')), 8000))
       await Promise.race([
         saveInterventionToCloud(interventionData.value, currentUser.value?.email),
         timeout
       ])
     } catch (e) {
+      // AQUÍ ESTÁ EL CHISMOSO: Imprimimos el error real
+      console.error("🚨 ERROR REAL DE FIREBASE:", e)
+      
       console.warn("Activando protocolo de guardado local.")
       newActivity.status = 'Pendiente de Red'
       newActivity.time = 'Guardado en modo local'
       newActivity.rawData = interventionData.value
-      triggerToast('Aviso: Guardado en modo local por lentitud de red.', 'error')
+      
+      // EL TOAST AHORA MUESTRA LA CAUSA EXACTA
+      triggerToast(`Fallo en la nube: ${e.message || 'Demasiado tiempo de espera'}`, 'error')
     }
   } else {
     newActivity.rawData = interventionData.value
