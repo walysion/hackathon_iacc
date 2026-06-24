@@ -6,7 +6,7 @@ import LoginView from './components/views/LoginView.vue'
 import DashboardView from './components/views/DashboardView.vue'
 import AdminDashboard from './components/views/AdminDashboard.vue'
 import UserManagementView from './components/views/UserManagementView.vue'
-import AuditLogsView from './components/views/AuditLogsView.vue' // <-- NUEVA VISTA INYECTADA
+import AuditLogsView from './components/views/AuditLogsView.vue'
 
 // --- IMPORTACIÓN DE MÓDULOS DE FLUJO ---
 import SecurityMfa from './components/modules/SecurityMfa.vue'
@@ -72,7 +72,7 @@ const currentHelpInfo = computed(() => {
     'role-select': { title: 'Selección de Módulo', desc: 'Elige el "Panel de Supervisión" para analíticas, el "Panel de Terreno" para capturas o la "Consola TI".' },
     'admin-dashboard': { title: 'Panel de Supervisión', desc: 'Área exclusiva para revisión de estadísticas, auditorías y gestión de equipo.' },
     'user-management': { title: 'Gestión de Personal', desc: 'Área para crear, editar o eliminar cuentas de terapeutas. Administra RUT o Pasaportes válidos.' },
-    'audit-logs': { title: 'Centro de Monitoreo TI', desc: 'Consola de comandos exclusiva para auditoría forense de accesos por dirección IP.' }, // <-- NUEVA PÁGINA AYUDA
+    'audit-logs': { title: 'Centro de Monitoreo TI', desc: 'Consola de comandos exclusiva para auditoría forense de accesos por dirección IP.' },
     'dashboard': { title: 'Historial Clínico', desc: 'Presiona el botón verde "Nueva Intervención" para iniciar un registro por voz.' },
     'type-select': { title: 'Selección de Plantilla', desc: 'Elige la opción que mejor describa la atención para guiar la estructura del modelo IA.' },
     'capture': { title: 'Asistente de Voz IA', desc: 'Habla naturalmente sobre el paciente. El sistema procesará tu relato al presionar Detener.' },
@@ -129,7 +129,6 @@ onUnmounted(() => {
 // --- DETERMINACIÓN LÓGICA DE PRIVILEGIOS DE MENÚ ---
 const hasMenuAccess = computed(() => {
   if (!currentUser.value || !currentUser.value.role) return false
-  // Tienen botón de Menú de retorno tanto los administradores como el soporte tecnológico
   return currentUser.value.role === 'admin' || currentUser.value.role === 'ti'
 })
 
@@ -162,7 +161,6 @@ const syncOfflineDrafts = async () => {
 // --- FLUJOS DE ENRUTAMIENTO DINÁMICO ---
 const handleLoginSuccess = (user) => { currentUser.value = user; currentStep.value = 'mfa' }
 const handleMfaVerified = () => { 
-  // Si el rol es admin o ti, los mandamos a elegir módulo. Si no, a terreno directo.
   currentStep.value = (currentUser.value.role === 'admin' || currentUser.value.role === 'ti') ? 'role-select' : 'dashboard' 
 }
 const handleLogout = () => { currentUser.value = null; currentStep.value = 'login' }
@@ -172,8 +170,11 @@ const handleTypeSelected = (typeId) => { selectedTemplate.value = typeId; curren
 
 // ENRUTADORES DE SUBMÓDULOS DE ADMINISTRACIÓN Y TECNOLOGÍA
 const goToUserManagement = () => { currentStep.value = 'user-management' }
+const goToAuditLogs = () => { currentStep.value = 'audit-logs' }
 const backToAdminDashboard = () => { currentStep.value = 'admin-dashboard' }
-const backToRoleSelect = () => { currentStep.value = 'role-select' }
+const backFromAudit = () => { 
+  currentStep.value = currentUser.value?.role === 'admin' ? 'admin-dashboard' : 'role-select' 
+}
 
 const handleRawProcessed = (text) => {
   rawTranscript.value = text
@@ -284,6 +285,14 @@ const returnToDashboard = () => {
           <div class="header-top">
             <div class="logo-mini">🌱</div>
             <div class="header-actions">
+              
+              <button 
+                v-if="currentUser?.role === 'ti' && currentStep === 'role-select'" 
+                class="btn-ti-monitor" 
+                @click="goToAuditLogs">
+                📟 Monitor TI
+              </button>
+
               <button v-if="hasMenuAccess && (currentStep === 'dashboard' || currentStep === 'admin-dashboard' || currentStep === 'user-management' || currentStep === 'audit-logs')" class="btn-secondary-mini" @click="goToRoleSelect">⬅ Menú</button>
               <button v-else-if="currentStep === 'type-select' || currentStep === 'capture' || currentStep === 'privacy' || currentStep === 'review' || currentStep === 'success'" class="btn-back" @click="returnToDashboard">Volver al Panel</button>
               <button class="btn-logout" @click="handleLogout">Salir</button>
@@ -299,11 +308,11 @@ const returnToDashboard = () => {
         
         <RoleSelector v-else-if="currentStep === 'role-select'" :user="currentUser" @on-select-module="currentStep = $event" />
         
-        <AdminDashboard v-else-if="currentStep === 'admin-dashboard'" :user="currentUser" @on-manage-users="goToUserManagement" />
+        <AdminDashboard v-else-if="currentStep === 'admin-dashboard'" :user="currentUser" @on-manage-users="goToUserManagement" @on-view-audit="goToAuditLogs" />
         
         <UserManagementView v-else-if="currentStep === 'user-management'" @on-back="backToAdminDashboard" />
         
-        <AuditLogsView v-else-if="currentStep === 'audit-logs'" @on-back="backToRoleSelect" />
+        <AuditLogsView v-else-if="currentStep === 'audit-logs'" @on-back="backFromAudit" />
 
         <DashboardView v-else-if="currentStep === 'dashboard'" :user="currentUser" :activities="globalActivities" @on-new-intervention="startNewIntervention" />
         
@@ -346,7 +355,6 @@ const returnToDashboard = () => {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover;
   object-position: center; z-index: 0; filter: blur(6px) brightness(0.65); transform: scale(1.05); pointer-events: none; 
 }
-.bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; object-position: center; z-index: 0; filter: blur(6px) brightness(0.65); transform: scale(1.05); pointer-events: none; }
 .bg-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.2); z-index: 1; transition: background 0.5s ease; }
 .overlay-darker { background: rgba(19, 78, 94, 0.4); }
 
@@ -386,8 +394,26 @@ const returnToDashboard = () => {
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
 .logo-mini { font-size: 2rem; }
+
+/* NUEVO BOTÓN EXCLUSIVO PARA ROL TI */
+.btn-ti-monitor {
+  background: rgba(139, 92, 246, 0.2); 
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #ddd6fe;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-ti-monitor:hover {
+  background: #8b5cf6;
+  color: white;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
 
 .btn-secondary-mini, .btn-logout, .btn-back { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s ease; }
 .btn-secondary-mini:hover, .btn-logout:hover, .btn-back:hover { background: rgba(255,255,255,0.2); }

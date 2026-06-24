@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 
 // IMPORTACIÓN DE LOS COMPONENTES MODULARES (Mapas, IA, Leaderboard)
-// Nota: Hemos eliminado TherapistManager de aquí porque ahora tiene su propia pantalla gigante.
 import AiInsightsPanel from '../modules/AiInsightsPanel.vue'
 import GeographicHotspots from '../modules/GeographicHotspots.vue'
 import TherapistLeaderboard from '../modules/TherapistLeaderboard.vue'
@@ -52,8 +51,8 @@ defineProps({
 })
 
 // --- COMUNICACIÓN CON EL ORQUESTADOR (App.vue) ---
-// Emitimos este evento para avisar que queremos ir a la pantalla de crear usuarios
-const emit = defineEmits(['onManageUsers'])
+// Emitimos estos eventos para avisar qué pantalla queremos abrir
+const emit = defineEmits(['onManageUsers', 'onViewAudit'])
 
 // --- ESTADO: Métricas Globales (KPIs) ---
 const kpis = ref({
@@ -165,16 +164,28 @@ const barOptions = {
       <TherapistLeaderboard />
     </div>
 
-    <div class="full-width-module">
+    <div class="grid-dual" style="margin-top: 20px;">
+      
       <div class="admin-actions-banner glass-panel">
         <div class="banner-text">
           <h3>👥 Directorio de Personal</h3>
-          <p>Administra accesos, roles y credenciales de los terapeutas de terreno (Validación RUT/Pasaporte).</p>
+          <p>Administra accesos y credenciales de los terapeutas de terreno.</p>
         </div>
         <button class="btn-manage" @click="emit('onManageUsers')">
           Abrir Gestión de Usuarios ➡
         </button>
       </div>
+
+      <div class="admin-actions-banner glass-panel border-ti">
+        <div class="banner-text">
+          <h3 class="text-ti">🛡️ Monitor de Auditoría TI</h3>
+          <p>Revisa logs de accesos, telemetría e IPs en tiempo real.</p>
+        </div>
+        <button class="btn-manage btn-ti" @click="emit('onViewAudit')">
+          Abrir Consola ➡
+        </button>
+      </div>
+
     </div>
 
   </div>
@@ -247,11 +258,6 @@ const barOptions = {
   margin-bottom: 20px;
 }
 
-.full-width-module {
-  width: 100%;
-  margin-bottom: 20px;
-}
-
 .chart-wrapper { 
   height: 200px; 
   position: relative; 
@@ -275,16 +281,20 @@ const barOptions = {
   padding-bottom: 10px; 
 }
 
-/* --- ESTILOS DEL NUEVO BANNER DE GESTIÓN DE USUARIOS --- */
+/* --- ESTILOS DE LOS BANNERS --- */
 .admin-actions-banner {
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 15px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 10px;
   border-left: 4px solid #3b82f6;
   padding: 18px 25px;
+}
+
+/* Nuevo estilo para el banner de Auditoría TI */
+.admin-actions-banner.border-ti {
+  border-left-color: #8b5cf6; 
 }
 
 .admin-actions-banner h3 {
@@ -295,8 +305,13 @@ const barOptions = {
   font-size: 1.2rem;
 }
 
+/* Título morado para el banner TI */
+.admin-actions-banner .text-ti {
+  color: #ddd6fe;
+}
+
 .admin-actions-banner p {
-  margin: 0;
+  margin: 0 0 10px 0;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -305,18 +320,30 @@ const barOptions = {
   background: #3b82f6;
   color: white;
   border: none;
-  padding: 14px 24px;
+  padding: 12px 20px;
   border-radius: 8px;
   font-size: 0.95rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
+  width: 100%;
+  text-align: center;
 }
 
 .btn-manage:hover {
   background: #2563eb;
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+}
+
+/* Botón morado para el banner TI */
+.btn-ti {
+  background: #8b5cf6;
+}
+
+.btn-ti:hover {
+  background: #7c3aed;
+  box-shadow: 0 5px 15px rgba(139, 92, 246, 0.4);
 }
 
 .text-blue { color: #60a5fa; }

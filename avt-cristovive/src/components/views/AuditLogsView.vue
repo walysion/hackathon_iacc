@@ -23,9 +23,9 @@ onMounted(async () => {
 const filteredLogs = computed(() => {
   if (!searchQuery.value) return logs.value
   const q = searchQuery.value.toLowerCase()
-  return logs.value.filter(l => 
-    l.user.toLowerCase().includes(q) || 
-    l.action.toLowerCase().includes(q)
+  return logs.value.filter(log => 
+    (log.user && log.user.toLowerCase().includes(q)) || 
+    (log.action && log.action.toLowerCase().includes(q))
   )
 })
 </script>
@@ -62,7 +62,7 @@ const filteredLogs = computed(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="log in filteredLogs" :key="l.id">
+            <tr v-for="log in filteredLogs" :key="log.id">
               <td class="time-col">{{ log.timeFormatted }}</td>
               <td>
                 <div class="event-info">
@@ -94,7 +94,8 @@ const filteredLogs = computed(() => {
 
 .dashboard-header { text-align: center; margin-bottom: 25px; position: relative; }
 .header-actions { position: absolute; left: 0; top: 0; }
-.btn-back { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+.btn-back { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-back:hover { background: rgba(59, 130, 246, 0.2); border-color: #60a5fa; }
 
 .welcome-text { color: #60a5fa; font-size: 0.95rem; margin-top: 4px; }
 .logs-panel { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(59, 130, 246, 0.2); padding: 20px; border-radius: 16px; }
@@ -102,7 +103,7 @@ const filteredLogs = computed(() => {
 .panel-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
 .panel-top-row h3 { color: #60a5fa; margin: 0; font-size: 1.1rem; }
 
-.search-box input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 10px 15px; border-radius: 8px; color: white; width: 250px; outline: none; }
+.search-box input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 10px 15px; border-radius: 8px; color: white; width: 250px; outline: none; transition: 0.2s; }
 .search-box input:focus { border-color: #60a5fa; }
 
 .table-container { width: 100%; overflow-x: auto; }
@@ -118,8 +119,11 @@ const filteredLogs = computed(() => {
 .status-pill { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
 .status-success { background: rgba(16, 185, 129, 0.15); color: #34d399; }
 .status-warning { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+.status-info { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
 
 .loading-state { padding: 40px; text-align: center; color: #60a5fa; }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(59, 130, 246, 0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-logs { padding: 30px; text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem; }
 </style>
