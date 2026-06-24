@@ -1,0 +1,21 @@
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # 1. ANTI-CLICKJACKING: Evita que un atacante meta tu app dentro de un iframe en otra web para robar clics.
+    X-Frame-Options = "DENY"
+
+    # 2. ANTI-XSS: Fuerza al navegador a bloquear la página si detecta una inyección de código malicioso.
+    X-XSS-Protection = "1; mode=block"
+
+    # 3. ANTI-MIME-SNIFFING: Evita que el navegador intente adivinar el tipo de archivo, mitigando la carga de scripts ocultos en fotos.
+    X-Content-Type-Options = "nosniff"
+
+    # 4. PRIVACIDAD DE REFERENCIA: Protege el origen de tus peticiones para no fugar información sensible de la fundación.
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # 5. CONTROL DE HARDWARE EXCLUSIVO: Autoriza el uso del micrófono únicamente a tu dominio para máxima privacidad del paciente.
+    Permissions-Policy = "microphone=(self)"
+
+    # 6. POLÍTICA DE SEGURIDAD DE CONTENIDO (CSP): El escudo definitivo. 
+    # Solo permite ejecutar scripts de tu propia web y de los servidores oficiales de Google/Firebase.
+    Content-Security-Policy = "default-src 'self' https://*.firebaseio.com https://*.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com;"

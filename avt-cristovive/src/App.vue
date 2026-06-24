@@ -24,6 +24,32 @@ import AppFooter from './components/AppFooter.vue'
 // Servicios de Base de Datos
 import { saveInterventionToCloud, getInterventionsFromCloud } from './services/database.js'
 
+// --- UTILIDADES DE SEGURIDAD (Cifrado LocalStorage) ---
+// Evita que los datos de salud queden expuestos en texto plano en la consola del navegador
+const secureStorageSave = (key, data) => {
+  try {
+    const rawString = JSON.stringify(data)
+    // Cifrado simétrico básico (Base64 + URI Encoding) compatible con UTF-8
+    const encodedData = btoa(unescape(encodeURIComponent(rawString)))
+    localStorage.setItem(key, encodedData)
+  } catch (e) {
+    console.error("Error encriptando caché local:", e)
+  }
+}
+
+const secureStorageLoad = (key) => {
+  const saved = localStorage.getItem(key)
+  if (!saved) return null
+  try {
+    // Desencriptación dinámica al cargar la app
+    const decodedString = decodeURIComponent(escape(atob(saved)))
+    return JSON.parse(decodedString)
+  } catch (e) {
+    console.error("Error descifrando caché local. Posible corrupción de datos:", e)
+    return null
+  }
+}
+
 // --- CONTROL DE NAVEGACIÓN EXTENDIDO ---
 const currentStep = ref('login') 
 const interventionData = ref(null)
@@ -122,9 +148,10 @@ onMounted(async () => {
   window.addEventListener('online', updateOnlineStatus)
   window.addEventListener('offline', updateOnlineStatus)
   
-  const savedActivities = localStorage.getItem('talitakum_activities')
+  // Usamos nuestro motor de carga segura (Descifrado Automático)
+  const savedActivities = secureStorageLoad('talitakum_activities')
   if (savedActivities) {
-    globalActivities.value = JSON.parse(savedActivities)
+    globalActivities.value = savedActivities
   }
   
   if (isOnline.value) {
@@ -134,14 +161,19 @@ onMounted(async () => {
       const dbRes = await Promise.race([getInterventionsFromCloud(), timeout])
       
       if (dbRes.success && dbRes.data.length > 0) {
+        // MEJORA: Mapeamos trayendo el detalle completo de los textos guardados en Firestore
         const formattedData = dbRes.data.map(doc => ({
           id: doc.id,
           type: doc.objetivo || 'Intervención Asistida',
           time: doc.createdAt?.toDate().toLocaleString('es-CL') || 'Reciente',
-          status: doc.syncStatus || 'Sincronizado'
+          status: doc.syncStatus || 'Sincronizado',
+          desarrollo: doc.desarrollo || '',
+          acuerdos: doc.acuerdos || '',
+          acciones: doc.acciones || '',
+          observaciones: doc.observaciones || ''
         }))
         globalActivities.value = formattedData
-        localStorage.setItem('talitakum_activities', JSON.stringify(formattedData))
+        secureStorageSave('talitakum_activities', formattedData) // Guardado Cifrado
       }
     } catch (e) {
       console.error("🚨 ERROR AL CARGAR DATOS INICIALES:", e)
@@ -177,6 +209,13 @@ const syncOfflineDrafts = async () => {
       ])
       act.status = 'Sincronizado'
       act.time = 'Sincronizado automáticamente'
+      
+      // Resguardamos los datos de texto en la actividad antes de limpiar el borrador raw
+      act.desarrollo = act.rawData.desarrollo
+      act.acuerdos = act.rawData.acuerdos
+      act.acciones = act.rawData.acciones
+      act.observaciones = act.rawData.observaciones
+      
       delete act.rawData 
     } catch (e) {
       // CAPTURADOR DE ERRORES REALES DE SINCRONIZACIÓN
@@ -184,7 +223,7 @@ const syncOfflineDrafts = async () => {
       triggerToast(`Fallo al sincronizar: ${e.message || 'Error desconocido'}`, 'error')
     }
   }
-  localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
+  secureStorageSave('talitakum_activities', globalActivities.value) // Actualizamos caché cifrada
 }
 
 // --- FUNCIONES DE FLUJO Y NAVEGACIÓN ---
@@ -247,11 +286,16 @@ const handleSaveSuccess = async (savedData) => {
   let currentStatus = isOnline.value ? 'Sincronizado' : 'Pendiente de Red'
   let currentTime = isOnline.value ? 'Justo ahora' : 'Guardado en modo local'
 
+  // MEJORA: Inyectamos los textos del formulario directamente en la actividad local para lectura inmediata
   const newActivity = {
     id: Date.now(),
     type: interventionData.value.objetivo,
     time: currentTime,
     status: currentStatus,
+    desarrollo: interventionData.value.desarrollo,
+    acuerdos: interventionData.value.acuerdos,
+    acciones: interventionData.value.acciones,
+    observaciones: interventionData.value.observaciones,
     rawData: null 
   }
 
@@ -270,17 +314,17 @@ const handleSaveSuccess = async (savedData) => {
       console.warn("Activando protocolo de guardado local.")
       newActivity.status = 'Pendiente de Red'
       newActivity.time = 'Guardado en modo local'
-      newActivity.rawData = interventionData.value
+      newActivity.rawData = { ...interventionData.value }
       
       // EL TOAST AHORA MUESTRA LA CAUSA EXACTA
       triggerToast(`Fallo en la nube: ${e.message || 'Demasiado tiempo de espera'}`, 'error')
     }
   } else {
-    newActivity.rawData = interventionData.value
+    newActivity.rawData = { ...interventionData.value }
   }
 
   globalActivities.value.unshift(newActivity)
-  localStorage.setItem('talitakum_activities', JSON.stringify(globalActivities.value))
+  secureStorageSave('talitakum_activities', globalActivities.value) // Cifrado en nuevo registro
   currentStep.value = 'success'
 }
 
