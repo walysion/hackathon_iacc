@@ -186,7 +186,6 @@ const goToRoleSelect = () => { currentStep.value = 'role-select' }
 const startNewIntervention = () => { currentStep.value = 'type-select' }
 const handleTypeSelected = (typeId) => { selectedTemplate.value = typeId; currentStep.value = 'capture' }
 
-// ENRUTADORES DE SUBMÓDULOS DE ADMINISTRACIÓN Y TECNOLOGÍA
 const goToUserManagement = () => { currentStep.value = 'user-management' }
 const goToAuditLogs = () => { currentStep.value = 'audit-logs' }
 const backToAdminDashboard = () => { currentStep.value = 'admin-dashboard' }
@@ -293,6 +292,13 @@ const returnToDashboard = () => {
     <Transition name="page-slide" mode="out-in">
       <div :key="currentStep" :class="['glass-card', { 'card-wide': currentStep !== 'login' && currentStep !== 'mfa' }]">
         
+        <button 
+          v-if="deferredPrompt" 
+          class="btn-install-pwa floating-install" 
+          @click="installPWA">
+          ⬇️ Instalar App
+        </button>
+
         <button class="help-btn" @click="showHelpModal = true" title="Ver Guía">?</button>
         
         <header class="app-header" v-if="currentStep !== 'login' && currentStep !== 'mfa' && currentStep !== 'role-select'">
@@ -303,13 +309,6 @@ const returnToDashboard = () => {
           <div class="header-top">
             <div class="logo-mini">🌱</div>
             <div class="header-actions">
-              
-              <button 
-                v-if="deferredPrompt" 
-                class="btn-install-pwa" 
-                @click="installPWA">
-                ⬇️ Instalar App
-              </button>
 
               <button 
                 v-if="currentUser?.role === 'ti' && currentStep === 'role-select'" 
@@ -424,22 +423,14 @@ html, body {
 }
 .help-btn:hover { background: #10b981; border-color: #34d399; transform: scale(1.1); box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
 
-.page-slide-enter-active, .page-slide-leave-active { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
-.page-slide-enter-from { opacity: 0; transform: translateX(30px); }
-.page-slide-leave-to { opacity: 0; transform: translateX(-30px); }
+/* NUEVO: ESTILO PARA EL BOTÓN DE INSTALACIÓN FLOTANTE */
+.floating-install {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 20;
+}
 
-.network-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: bold; padding: 4px 10px; border-radius: 20px; margin-bottom: 15px; letter-spacing: 0.3px; text-transform: uppercase; }
-.online-badge { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
-.online-badge .dot { width: 6px; height: 6px; background-color: #10b981; border-radius: 50%; }
-.offline-badge { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; animation: blink 2s infinite ease-in-out; }
-.offline-badge .dot { width: 6px; height: 6px; background-color: #f59e0b; border-radius: 50%; }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-
-.header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
-.logo-mini { font-size: 2rem; }
-
-/* NUEVO BOTÓN DE INSTALACIÓN PWA */
 .btn-install-pwa {
   background: linear-gradient(135deg, #f59e0b, #d97706);
   border: none;
@@ -463,6 +454,21 @@ html, body {
   70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
   100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
+
+.page-slide-enter-active, .page-slide-leave-active { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.page-slide-enter-from { opacity: 0; transform: translateX(30px); }
+.page-slide-leave-to { opacity: 0; transform: translateX(-30px); }
+
+.network-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: bold; padding: 4px 10px; border-radius: 20px; margin-bottom: 15px; letter-spacing: 0.3px; text-transform: uppercase; }
+.online-badge { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+.online-badge .dot { width: 6px; height: 6px; background-color: #10b981; border-radius: 50%; }
+.offline-badge { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; animation: blink 2s infinite ease-in-out; }
+.offline-badge .dot { width: 6px; height: 6px; background-color: #f59e0b; border-radius: 50%; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.logo-mini { font-size: 2rem; }
 
 .btn-ti-monitor {
   background: rgba(139, 92, 246, 0.2); 
