@@ -25,15 +25,15 @@ onMounted(() => {
     recognition.lang = 'es-CL' // Configuramos español de Chile
     recognition.interimResults = true // Queremos ver la transcripción en tiempo real
 
-    // Evento cuando la API nos entrega resultados
+    // Evento cuando la API nos entrega resultados (CORREGIDO EL BUG DE ECO Y ESPACIOS)
     recognition.onresult = (event) => {
-      let currentTranscript = ''
-      // Concatenamos todos los fragmentos de la sesión actual
-      for (let i = 0; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript
-      }
+      // Convertimos el objeto de resultados en un Array, limpiamos los espacios extra de cada frase y las unimos con un espacio real
+      const currentTranscript = Array.from(event.results)
+        .map(result => result[0].transcript.trim())
+        .join(' ')
+      
       // Actualizamos lo que ve el usuario en pantalla
-      transcript.value = currentTranscript
+      transcript.value = currentTranscript + ' '
     }
 
     // Evento cuando la API deja de escuchar
@@ -302,9 +302,10 @@ const processIntervention = async () => {
   margin-bottom: 30px;
   height: 180px;
   overflow-y: auto;
+  overflow-x: hidden; /* Evitamos el scroll horizontal a toda costa */
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(110, 231, 183, 0.3); /* Borde luminoso sutil */
+  border: 1px solid rgba(110, 231, 183, 0.3);
   padding: 20px;
   box-sizing: border-box;
   box-shadow: inset 0 4px 15px rgba(0, 0, 0, 0.3);
@@ -318,12 +319,16 @@ const processIntervention = async () => {
   border-radius: 10px;
 }
 
+/* LA CURA PARA LA RESPONSIVIDAD: Romper palabras largas forzosamente */
 .transcription-preview {
   font-size: 1.05rem;
   color: #f8fafc;
   line-height: 1.6;
   margin: 0;
   text-align: left;
+  overflow-wrap: break-word; /* Estándar moderno */
+  word-break: break-word; /* Fallback de seguridad */
+  white-space: pre-wrap; /* Mantiene saltos de línea pero permite quebrar palabras */
 }
 
 .typing-placeholder {

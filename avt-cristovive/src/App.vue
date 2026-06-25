@@ -340,11 +340,32 @@ const returnToDashboard = () => {
   </main>
 </template>
 
+<style>
+/* =========================================================
+   RESET GLOBAL: LA CURA DEFINITIVA ANTI-DESBORDAMIENTO
+   Esto obliga a todos los módulos y vistas a calcular
+   sus márgenes internos (padding) hacia adentro,
+   evitando que rompan la pantalla del celular.
+   ========================================================= */
+*, *::before, *::after {
+  box-sizing: border-box !important;
+}
+
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+</style>
+
 <style scoped>
 .app-background {
   min-height: 100vh; display: flex; flex-direction: column; align-items: center;
   padding: 40px 0 0 0; position: relative;
-  background: linear-gradient(135deg, #134e5e, #71b280); overflow-y: auto; overflow-x: hidden;
+  background: linear-gradient(135deg, #134e5e, #71b280); 
+  overflow-y: auto; overflow-x: hidden;
+  width: 100%;
 }
 .app-background::before {
   content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
@@ -362,10 +383,10 @@ const returnToDashboard = () => {
   position: relative; z-index: 2; background: rgba(20, 30, 40, 0.65); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; padding: 35px 25px;
   width: calc(100% - 40px); max-width: 480px; box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
-  color: white; text-align: center; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-sizing: border-box; margin-top: auto; margin-bottom: 60px; 
+  color: white; text-align: center; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); margin-top: auto; margin-bottom: 60px; 
 }
 
-/* RESPONSIVIDAD: Ajuste maestro de 1200px para aprovechar los monitores en PC */
+/* RESPONSIVIDAD MAESTRA */
 @media (min-width: 768px) { 
   .card-wide { 
     max-width: 1200px !important; 

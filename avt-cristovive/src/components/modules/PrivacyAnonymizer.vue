@@ -224,6 +224,9 @@ const handleProceed = () => {
   font-size: 0.95rem;
   line-height: 1.5;
   font-family: monospace;
+  /* LA CURA DE RESPONSIVIDAD PARA EL ESCÁNER */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .scanner-laser {
@@ -321,6 +324,7 @@ const handleProceed = () => {
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  width: 100%;
 }
 
 .box-header {
@@ -357,6 +361,7 @@ const handleProceed = () => {
   gap: 15px;
   max-height: 280px;
   overflow-y: auto;
+  overflow-x: hidden; /* Seguridad extra para evitar scroll horizontal */
 }
 
 /* Custom Scrollbar para la comparativa */
@@ -372,12 +377,19 @@ const handleProceed = () => {
   letter-spacing: 0.5px;
 }
 
+/* LA CURA DE RESPONSIVIDAD PARA LA COMPARATIVA */
 .text-block p {
   margin: 0;
   font-size: 0.9rem;
   padding: 12px;
   border-radius: 10px;
   line-height: 1.5;
+  width: 100%;
+  box-sizing: border-box;
+  /* Estas 3 líneas son la magia anti-desbordamiento */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap; 
 }
 
 .raw-text {
@@ -402,19 +414,22 @@ const handleProceed = () => {
   border-radius: 6px;
   font-weight: 700;
   font-size: 0.75rem;
-  margin: 0 4px;
+  margin: 2px 4px;
   box-shadow: 0 0 10px rgba(52, 211, 153, 0.1);
+  word-break: normal; /* Para que el badge en sí no se rompa a la mitad */
 }
 
 /* Botonera Premium */
 .action-buttons {
   display: flex;
+  flex-wrap: wrap; /* Permite que los botones bajen si no caben en celular */
   gap: 12px;
   margin-top: 5px;
 }
 
 .btn-cancel {
   flex: 1;
+  min-width: 150px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255,255,255,0.2);
   color: white;
@@ -433,6 +448,7 @@ const handleProceed = () => {
 
 .btn-proceed {
   flex: 2;
+  min-width: 200px;
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
