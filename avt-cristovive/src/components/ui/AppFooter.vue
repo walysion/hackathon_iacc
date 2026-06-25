@@ -158,24 +158,9 @@ const openLinkedin = (url) => {
     </div>
 
     <div class="sidebar-brand-section">
-      
-      <div class="iso-badges-container">
-        <div class="iso-badge" title="Certified Information Security Management">
-          <div class="iso-led"></div>
-          <span class="iso-text">ISO 27001</span>
-        </div>
-        <div class="iso-badge" title="Artificial Intelligence Management System Compliant">
-          <div class="iso-led"></div>
-          <span class="iso-text">ISO 42001:2023</span>
-        </div>
-      </div>
-      
-      <div class="brand-divider"></div>
-
       <div class="cyberforge-brand-box">
         <img src="/logo-cyberforge.png" alt="CyberForge Logo" class="cf-main-logo" @error="(e) => e.target.style.display='none'" />
       </div>
-      
     </div>
 
   </footer>
@@ -319,22 +304,13 @@ const openLinkedin = (url) => {
 .btn-link { background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; padding: 6px 20px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; cursor: pointer; transition: all 0.2s; outline: none; }
 .btn-link:hover { background: rgba(59, 130, 246, 0.2); color: white; border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2); }
 
-/* --- BLOQUE LATERAL DERECHO (ALINEACIÓN HORIZONTAL) --- */
+/* --- BLOQUE LATERAL DERECHO (LOGO CYBERFORGE SOLO) --- */
 .sidebar-brand-section { 
   position: absolute;
   right: 40px;
-  bottom: 50px; /* Ajustado sutilmente */
+  bottom: 20px; /* Ajustado ligeramente por el nuevo tamaño gigante */
   display: flex; 
-  flex-direction: row; /* En la misma línea */
-  align-items: center; /* Alineados perfectamente al centro vertical */
-  gap: 25px; 
-}
-
-/* Separador elegante entre ISO y Logo */
-.brand-divider {
-  width: 1px;
-  height: 45px;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.2), transparent);
+  align-items: center; 
 }
 
 .cyberforge-brand-box { 
@@ -348,47 +324,16 @@ const openLinkedin = (url) => {
 }
 
 .cyberforge-brand-box:hover {
-  transform: translateY(-2px) scale(1.03);
+  transform: translateY(-5px) scale(1.02);
 }
 
-/* Tamaño de tu logo más imponente */
+/* Tamaño de tu logo incrementado x3 (de 85px a 255px) */
 .cf-main-logo { 
-  height: 85px; 
+  height: 255px; 
   width: auto; 
   object-fit: contain; 
-  filter: drop-shadow(0 4px 15px rgba(16, 185, 129, 0.4)); 
-}
-
-/* Rediseño de insignias ISO tipo Hacker/Tech */
-.iso-badges-container { display: flex; gap: 12px; }
-
-.iso-badge { 
-  display: flex; 
-  align-items: center; 
-  gap: 8px; 
-  background: rgba(15, 23, 42, 0.7); 
-  border: 1px solid rgba(100, 116, 139, 0.3); 
-  padding: 8px 14px; 
-  border-radius: 6px; 
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-}
-
-/* LED de encendido en el badge ISO */
-.iso-led {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-
-/* Texto Monospace súper profesional */
-.iso-text { 
-  font-size: 0.8rem; 
-  font-weight: 800; 
-  color: #cbd5e1; 
-  letter-spacing: 1px;
-  font-family: 'Courier New', Courier, monospace; 
+  /* Modifiqué la sombra a azul/cian para potenciar y complementar el resplandor de tu propia imagen */
+  filter: drop-shadow(0 8px 25px rgba(0, 195, 255, 0.4)); 
 }
 
 /* Comportamiento Responsivo */
