@@ -83,12 +83,30 @@ const currentHelpInfo = computed(() => {
   return helps[currentStep.value] || { title: 'Ayuda', desc: 'Información no disponible para esta pantalla.' }
 })
 
+// --- LÓGICA DE INSTALACIÓN PWA (BOTÓN INSTALAR APP) ---
+const deferredPrompt = ref(null)
+
+const installPWA = async () => {
+  if (!deferredPrompt.value) return
+  deferredPrompt.value.prompt()
+  const { outcome } = await deferredPrompt.value.userChoice
+  if (outcome === 'accepted') {
+    deferredPrompt.value = null // Oculta el botón una vez instalada
+  }
+}
+
 // --- ESTADO GLOBAL: Historial unificado de actividades ---
 const globalActivities = ref([])
 
 onMounted(async () => {
   window.addEventListener('online', updateOnlineStatus)
   window.addEventListener('offline', updateOnlineStatus)
+  
+  // Escuchador que detecta si el dispositivo permite instalar la app
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    deferredPrompt.value = e
+  })
   
   const savedActivities = secureStorageLoad('talitakum_activities')
   if (savedActivities) {
@@ -287,6 +305,13 @@ const returnToDashboard = () => {
             <div class="header-actions">
               
               <button 
+                v-if="deferredPrompt" 
+                class="btn-install-pwa" 
+                @click="installPWA">
+                ⬇️ Instalar App
+              </button>
+
+              <button 
                 v-if="currentUser?.role === 'ti' && currentStep === 'role-select'" 
                 class="btn-ti-monitor" 
                 @click="goToAuditLogs">
@@ -343,9 +368,6 @@ const returnToDashboard = () => {
 <style>
 /* =========================================================
    RESET GLOBAL: LA CURA DEFINITIVA ANTI-DESBORDAMIENTO
-   Esto obliga a todos los módulos y vistas a calcular
-   sus márgenes internos (padding) hacia adentro,
-   evitando que rompan la pantalla del celular.
    ========================================================= */
 *, *::before, *::after {
   box-sizing: border-box !important;
@@ -386,7 +408,6 @@ html, body {
   color: white; text-align: center; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); margin-top: auto; margin-bottom: 60px; 
 }
 
-/* RESPONSIVIDAD MAESTRA */
 @media (min-width: 768px) { 
   .card-wide { 
     max-width: 1200px !important; 
@@ -418,7 +439,31 @@ html, body {
 .header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
 .logo-mini { font-size: 2rem; }
 
-/* NUEVO BOTÓN EXCLUSIVO PARA ROL TI */
+/* NUEVO BOTÓN DE INSTALACIÓN PWA */
+.btn-install-pwa {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);
+  transition: all 0.3s ease;
+  animation: pulse-orange 2s infinite;
+}
+.btn-install-pwa:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(245, 158, 11, 0.6);
+}
+
+@keyframes pulse-orange {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
 .btn-ti-monitor {
   background: rgba(139, 92, 246, 0.2); 
   border: 1px solid rgba(139, 92, 246, 0.4);
