@@ -1,92 +1,106 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-// Definimos los eventos que este componente emitirá hacia App.vue
 const emit = defineEmits(['onProcessed'])
 
-// Estados internos del componente
 const isListening = ref(false)
 const transcript = ref('')
 const isProcessing = ref(false)
 const errorMessage = ref('')
 
-// Variables para guardar la instancia del reconocimiento de voz y la memoria anti-eco
 let recognition = null
-let finalTranscriptString = '' // Memoria absoluta para resultados confirmados
+let sessionFinalText = '' // Bóveda de memoria absoluta
+let currentUtterance = '' // Lo que se está diciendo en el instante actual
 
-// 1. Inicializar la API de Voz al montar el componente
 onMounted(() => {
-  // Verificamos soporte del navegador (Chrome, Edge, Safari funcionan bien)
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
   
   if (SpeechRecognition) {
     recognition = new SpeechRecognition()
-    // VITAL: 'continuous = true' permite que el terapeuta haga pausas al hablar sin que se corte el micrófono
-    recognition.continuous = true 
-    recognition.lang = 'es-CL' // Configuramos español de Chile
-    recognition.interimResults = true // Queremos ver la transcripción en tiempo real
+    
+    // 🚀 LA CURA PARA ANDROID: Desactivamos el modo continuo. 
+    // Obligamos al celular a procesar en ráfagas cortas para que no colapse su memoria.
+    recognition.continuous = false 
+    recognition.lang = 'es-CL' 
+    recognition.interimResults = true 
 
-    // Evento cuando la API nos entrega resultados (LA CURA DEFINITIVA ANTI-ECO PARA MÓVILES)
     recognition.onresult = (event) => {
-      let interimTranscript = ''
+      currentUtterance = ''
+      
+      // Capturamos solo la ráfaga actual de voz
+      for (let i = 0; i < event.results.length; ++i) {
+        currentUtterance += event.results[i][0].transcript
+      }
+      
+      // Mostramos en pantalla: La bóveda histórica + la ráfaga actual limpia
+      transcript.value = (sessionFinalText + ' ' + currentUtterance).trim()
+    }
 
-      // Iteramos desde el último índice modificado (event.resultIndex) para no duplicar historiales
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          // Si la API confirma que la palabra es final, la guardamos en la bóveda
-          finalTranscriptString += event.results[i][0].transcript
-        } else {
-          // Si la API sigue "adivinando", la guardamos como temporal
-          interimTranscript += event.results[i][0].transcript
+    recognition.onend = () => {
+      // Si isListening sigue en true, significa que el usuario hizo una pausa natural al hablar,
+      // NO que apretó el botón de detener.
+      if (isListening.value) {
+        // Guardamos la ráfaga limpia en la bóveda histórica
+        if (currentUtterance) {
+          sessionFinalText += ' ' + currentUtterance.trim()
+          currentUtterance = '' // Limpiamos la memoria de Android para la siguiente ráfaga
+        }
+        
+        // ¡Magia! Reactivamos el micrófono silenciosamente. El usuario no nota el corte.
+        try {
+          recognition.start()
+        } catch(e) {
+          console.log("Reinicio de micrófono en progreso...")
+        }
+      } 
+      // Si isListening es false, el terapeuta apretó explícitamente el botón "Detener"
+      else {
+        if (currentUtterance) {
+          sessionFinalText += ' ' + currentUtterance.trim()
+        }
+        transcript.value = sessionFinalText.trim()
+        
+        // Procesamos el texto final
+        if (transcript.value.length > 0) {
+          processIntervention()
+        } else if (!errorMessage.value) {
+          errorMessage.value = "No se detectó voz. Por favor, intenta grabar nuevamente."
         }
       }
-      
-      // Actualizamos lo que ve el usuario en pantalla: Lo confirmado + lo que se está adivinando
-      transcript.value = finalTranscriptString + interimTranscript
     }
 
-    // Evento cuando la API deja de escuchar
-    recognition.onend = () => {
-      isListening.value = false
-      
-      // Validamos si realmente se capturó audio
-      if (transcript.value.trim().length > 0) {
-        processIntervention()
-      } else if (!errorMessage.value) {
-        // Si no hay error previo, pero no hay texto, avisamos al usuario
-        errorMessage.value = "No se detectó voz. Por favor, intenta grabar nuevamente."
-      }
-    }
-
-    // Manejo de errores
     recognition.onerror = (event) => {
+      // Ignoramos el error 'no-speech' que ocurre naturalmente en pausas largas de Android
+      if (event.error === 'no-speech') return; 
+
       console.error("Error de reconocimiento:", event.error)
       if (event.error === 'not-allowed') {
         errorMessage.value = "Debes dar permisos de micrófono en tu navegador."
+        isListening.value = false
       } else {
-        errorMessage.value = "Hubo un error al intentar capturar la voz. Inténtalo nuevamente."
+        errorMessage.value = "Hubo un error de red o de audio. Inténtalo nuevamente."
+        isListening.value = false
       }
-      isListening.value = false
     }
   } else {
-    errorMessage.value = "Tu navegador no soporta la captura de voz nativa. Por favor usa Chrome, Edge o Safari moderno."
+    errorMessage.value = "Tu navegador no soporta la captura de voz nativa. Usa Chrome o Edge."
   }
 })
 
-// Limpieza de recursos si el terapeuta abandona la vista mientras graba
 onUnmounted(() => {
   if (recognition && isListening.value) {
+    isListening.value = false // Cortamos el bucle
     recognition.stop()
   }
 })
 
-// 2. Funciones de control de la interfaz
 const startListening = () => {
   if (!recognition) return
   transcript.value = ''
-  finalTranscriptString = '' // Purgamos la memoria al iniciar una nueva grabación
+  sessionFinalText = '' // Purgamos la bóveda al iniciar nueva atención
+  currentUtterance = ''
   errorMessage.value = ''
-  isListening.value = true
+  isListening.value = true // Activa las animaciones y el bucle de auto-reinicio
   
   try {
     recognition.start()
@@ -97,23 +111,18 @@ const startListening = () => {
 
 const stopListening = () => {
   if (recognition && isListening.value) {
-    recognition.stop()
-    // onend se disparará automáticamente y continuará el flujo
+    isListening.value = false // APAGAMOS la bandera para que onend sepa que es el final definitivo
+    recognition.stop() // Esto disparará onend inmediatamente
   }
 }
 
-// 3. Simulación de procesamiento por IA (Para el MVP de la Hackathon)
 const processIntervention = async () => {
   isProcessing.value = true
   errorMessage.value = ''
   
-  // Simulamos una espera de red de 2 segundos para dar sensación de procesamiento LLM
   await new Promise(resolve => setTimeout(resolve, 2000))
 
   isProcessing.value = false
-  
-  // RESOLUCIÓN DEL ATASCO CLAVE: Emitimos el texto crudo (String) en lugar del objeto antiguo
-  // Esto permite que pase limpiamente por el Anonimizador PII y el detector de Alertas Críticas
   const cleanText = transcript.value.trim()
   emit('onProcessed', cleanText)
 }
@@ -312,7 +321,7 @@ const processIntervention = async () => {
   margin-bottom: 30px;
   height: 180px;
   overflow-y: auto;
-  overflow-x: hidden; /* Evitamos el scroll horizontal a toda costa */
+  overflow-x: hidden; 
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(110, 231, 183, 0.3);
@@ -329,16 +338,16 @@ const processIntervention = async () => {
   border-radius: 10px;
 }
 
-/* LA CURA PARA LA RESPONSIVIDAD: Romper palabras largas forzosamente */
+/* REGLAS DE RESPONSIVIDAD ESTRICTAS */
 .transcription-preview {
   font-size: 1.05rem;
   color: #f8fafc;
   line-height: 1.6;
   margin: 0;
   text-align: left;
-  overflow-wrap: break-word; /* Estándar moderno */
-  word-break: break-word; /* Fallback de seguridad */
-  white-space: pre-wrap; /* Mantiene saltos de línea pero permite quebrar palabras */
+  overflow-wrap: break-word; 
+  word-break: break-word; 
+  white-space: pre-wrap; 
 }
 
 .typing-placeholder {
@@ -346,7 +355,7 @@ const processIntervention = async () => {
   font-style: italic;
 }
 
-/* Botón Detener (Estilo Premium) */
+/* Botón Detener */
 .stop-btn {
   background: rgba(239, 68, 68, 0.15);
   color: #fca5a5;
@@ -403,7 +412,6 @@ const processIntervention = async () => {
   max-width: 90%;
 }
 
-/* Loader Estilo Núcleo IA */
 .ai-core-loader {
   position: relative;
   width: 80px;
@@ -449,7 +457,6 @@ const processIntervention = async () => {
   100% { transform: rotate(360deg); }
 }
 
-/* Mensajes y utilidades */
 .error-message {
   color: #fca5a5;
   margin-top: 25px;
