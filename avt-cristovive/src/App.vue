@@ -336,7 +336,7 @@ const returnToDashboard = () => {
       </div>
     </Transition>
 
-    <AppFooter team-name="[Tu Grupo Aquí]" />
+    <AppFooter team-name="[Grupo 4 | CyberForge]" />
   </main>
 </template>
 
