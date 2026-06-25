@@ -10,8 +10,9 @@ const transcript = ref('')
 const isProcessing = ref(false)
 const errorMessage = ref('')
 
-// Variable para guardar la instancia del reconocimiento de voz
+// Variables para guardar la instancia del reconocimiento de voz y la memoria anti-eco
 let recognition = null
+let finalTranscriptString = '' // Memoria absoluta para resultados confirmados
 
 // 1. Inicializar la API de Voz al montar el componente
 onMounted(() => {
@@ -25,15 +26,23 @@ onMounted(() => {
     recognition.lang = 'es-CL' // Configuramos español de Chile
     recognition.interimResults = true // Queremos ver la transcripción en tiempo real
 
-    // Evento cuando la API nos entrega resultados (CORREGIDO EL BUG DE ECO Y ESPACIOS)
+    // Evento cuando la API nos entrega resultados (LA CURA DEFINITIVA ANTI-ECO PARA MÓVILES)
     recognition.onresult = (event) => {
-      // Convertimos el objeto de resultados en un Array, limpiamos los espacios extra de cada frase y las unimos con un espacio real
-      const currentTranscript = Array.from(event.results)
-        .map(result => result[0].transcript.trim())
-        .join(' ')
+      let interimTranscript = ''
+
+      // Iteramos desde el último índice modificado (event.resultIndex) para no duplicar historiales
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          // Si la API confirma que la palabra es final, la guardamos en la bóveda
+          finalTranscriptString += event.results[i][0].transcript
+        } else {
+          // Si la API sigue "adivinando", la guardamos como temporal
+          interimTranscript += event.results[i][0].transcript
+        }
+      }
       
-      // Actualizamos lo que ve el usuario en pantalla
-      transcript.value = currentTranscript + ' '
+      // Actualizamos lo que ve el usuario en pantalla: Lo confirmado + lo que se está adivinando
+      transcript.value = finalTranscriptString + interimTranscript
     }
 
     // Evento cuando la API deja de escuchar
@@ -75,6 +84,7 @@ onUnmounted(() => {
 const startListening = () => {
   if (!recognition) return
   transcript.value = ''
+  finalTranscriptString = '' // Purgamos la memoria al iniciar una nueva grabación
   errorMessage.value = ''
   isListening.value = true
   
