@@ -48,7 +48,8 @@ const triggerToast = (msg, type = 'success') => {
   toastMessage.value = msg
   toastType.value = type
   showToast.value = true
-  setTimeout(() => { showToast.value = false }, 4000)
+  // Le damos un poco más de tiempo para que alcancen a leer las instrucciones de instalación
+  setTimeout(() => { showToast.value = false }, 5000) 
 }
 
 const updateOnlineStatus = () => {
@@ -83,15 +84,20 @@ const currentHelpInfo = computed(() => {
   return helps[currentStep.value] || { title: 'Ayuda', desc: 'Información no disponible para esta pantalla.' }
 })
 
-// --- LÓGICA DE INSTALACIÓN PWA (BOTÓN INSTALAR APP) ---
+// --- LÓGICA DE INSTALACIÓN PWA (BOTÓN INSTALAR APP A PRUEBA DE FALLOS) ---
 const deferredPrompt = ref(null)
 
 const installPWA = async () => {
-  if (!deferredPrompt.value) return
-  deferredPrompt.value.prompt()
-  const { outcome } = await deferredPrompt.value.userChoice
-  if (outcome === 'accepted') {
-    deferredPrompt.value = null // Oculta el botón una vez instalada
+  if (deferredPrompt.value) {
+    // Si Android lo permite, lanza la ventana de instalación nativa
+    deferredPrompt.value.prompt()
+    const { outcome } = await deferredPrompt.value.userChoice
+    if (outcome === 'accepted') {
+      deferredPrompt.value = null 
+    }
+  } else {
+    // EL SALVAVIDAS: Si estás en iPhone o Chrome se pone paranoico, muestra esto:
+    triggerToast('Para instalar: Abre el menú de tu navegador (los 3 puntitos o "Compartir") y toca "Añadir a la pantalla de inicio" 📱', 'success')
   }
 }
 
@@ -293,7 +299,6 @@ const returnToDashboard = () => {
       <div :key="currentStep" :class="['glass-card', { 'card-wide': currentStep !== 'login' && currentStep !== 'mfa' }]">
         
         <button 
-          v-if="deferredPrompt" 
           class="btn-install-pwa floating-install" 
           @click="installPWA">
           ⬇️ Instalar App
@@ -423,7 +428,7 @@ html, body {
 }
 .help-btn:hover { background: #10b981; border-color: #34d399; transform: scale(1.1); box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
 
-/* NUEVO: ESTILO PARA EL BOTÓN DE INSTALACIÓN FLOTANTE */
+/* NUEVO: ESTILO PARA EL BOTÓN DE INSTALACIÓN FLOTANTE (Ahora Siempre Visible) */
 .floating-install {
   position: absolute;
   top: 15px;
